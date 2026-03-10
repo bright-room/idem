@@ -1,0 +1,15 @@
+HELP.md
+
+### Go Land ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+
+### VS Code ###
+.vscode/
+
+### AI agents ###
+/.claude/outputs/
+.claude/settings.local.json
