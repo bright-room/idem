@@ -6,16 +6,13 @@ linters:
     - govet
     - staticcheck
     - unused
-    - gosimple
     - ineffassign
-    - typecheck
     - gocritic
     - revive
     - misspell
     - prealloc
     - unconvert
     - unparam
-    - gofumpt
 
 formatters:
   enable:
