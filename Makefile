@@ -1,9 +1,11 @@
 COMPOSE = docker compose run --rm dev
 
-.PHONY: build fmt lint test test-unit test-integration godoc shell
+.PHONY: build check fmt lint test test-unit test-integration godoc shell
 
 build:
 	docker compose build
+
+check: fmt lint test test-integration
 
 fmt:
 	$(COMPOSE) golangci-lint fmt ./...
