@@ -1,0 +1,12 @@
+services:
+  dev:
+    build: .
+    volumes:
+      - .:/workspace
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    working_dir: /workspace
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
