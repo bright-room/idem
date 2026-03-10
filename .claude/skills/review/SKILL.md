@@ -42,16 +42,14 @@ git log ${BASE_BRANCH}...HEAD --oneline
 
 ### 3. レビューの実施
 
-まず `.claude/guidelines/coding.md` を読み込み、コーディングガイドラインの内容を把握する。
-
 以下の観点でレビューを行う:
 
-- **アーキテクチャ**: 設計パターン、モジュール分割、依存関係の適切さ
-- **プロダクトコード**: ロジックの正確性、エッジケース、命名規則、コーディング規約への準拠、**コーディングガイドライン（`.claude/guidelines/coding.md`）への準拠**
+- **アーキテクチャ**: 設計パターン、パッケージ分割、依存関係の適切さ
+- **プロダクトコード**: ロジックの正確性、エッジケース、命名規則、Go の慣習への準拠
 - **テストコード**: テストカバレッジ、テストケースの網羅性、テストの品質
-- **ビルド・設定**: Gradle設定、Spring Boot設定、Auto-configuration の正確性
+- **ビルド・設定**: go.mod / go.sum の管理、ビルド設定の正確性
 - **セキュリティ**: 認証・認可の実装、入力バリデーション、機密情報の取り扱い、既知の脆弱性パターン
-- **ドキュメント**: Javadoc/KDocの整備状況、README・CHANGELOG の更新、公開APIの説明の十分さ
+- **ドキュメント**: GoDoc コメントの整備状況、README の更新、公開 API の説明の十分さ
 
 ### 4. レビュー結果の出力
 
@@ -63,7 +61,7 @@ git log ${BASE_BRANCH}...HEAD --oneline
 
 - ディレクトリが存在しない場合は作成すること
 - ファイル名: `REVIEW-<現在のブランチ名（スラッシュをハイフンに変換）>.md`
-  - 例: ブランチ `feature/add-flux-module` → `REVIEW-feature-add-flux-module.md`
+  - 例: ブランチ `feature/add-middleware` → `REVIEW-feature-add-middleware.md`
 
 #### GitHub Actions 実行時 (`CI=true`)
 
@@ -102,7 +100,7 @@ LATEST_COMMIT=$(gh pr view --json headRefOid -q .headRefOid)
 <なぜこれが問題なのか、技術的な文脈情報>
 
 **修正案**
-\```java
+\```go
 // 修正後のコード例
 \```
 ```
@@ -123,12 +121,12 @@ gh api repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/reviews \
   --jsonpath-input <(echo '{
     "comments": [
       {
-        "path": "src/main/java/com/example/Foo.java",
+        "path": "pkg/example/foo.go",
         "line": 42,
-        "body": "🔴 **C-1: 問題のタイトル**\n\n**問題点**\n説明...\n\n**背景**\n文脈...\n\n**修正案**\n```java\n// code\n```"
+        "body": "🔴 **C-1: 問題のタイトル**\n\n**問題点**\n説明...\n\n**背景**\n文脈...\n\n**修正案**\n```go\n// code\n```"
       },
       {
-        "path": "src/test/java/com/example/FooTest.java",
+        "path": "pkg/example/foo_test.go",
         "line": 10,
         "body": "🟡 **M-1: 問題のタイトル**\n\n**問題点**\n説明..."
       }
@@ -228,8 +226,8 @@ gh api repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/reviews \
 
 <!-- 具体的な問題の説明 -->
 
-> 📍 [`path/to/file.java:42`](path/to/file.java#L42)
-> ```java
+> 📍 [`path/to/file.go:42`](path/to/file.go#L42)
+> ```go
 > // 該当コードの引用
 > ```
 
@@ -239,7 +237,7 @@ gh api repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/reviews \
 
 **修正案**
 
-```java
+```go
 // 修正後のコード例
 ```
 
@@ -249,7 +247,7 @@ gh api repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/reviews \
 
 <!-- 詳細な説明 -->
 
-> 📍 [`path/to/file.java:55`](path/to/file.java#L55)
+> 📍 [`path/to/file.go:55`](path/to/file.go#L55)
 
 ---
 
@@ -295,13 +293,13 @@ gh api repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/reviews \
 
 ### カバレッジマトリクス
 
-<!-- テスト対象のクラス/メソッドに対するテストカバレッジの概要 -->
+<!-- テスト対象の関数/メソッドに対するテストカバレッジの概要 -->
 
-| 対象クラス | メソッド/機能 | ユニットテスト | 統合テスト | 備考 |
-|-----------|-------------|:-------------:|:---------:|------|
-| `ClassName` | `methodName()` | ✅ | ✅ | |
-| `ClassName` | `methodName2()` | ✅ | ❌ | テスト未作成 |
-| `ClassName` | エッジケース: null入力 | ❌ | ❌ | 要追加 |
+| 対象パッケージ | 関数/メソッド | ユニットテスト | 統合テスト | 備考 |
+|--------------|-------------|:-------------:|:---------:|------|
+| `pkg/xxx` | `FuncName()` | ✅ | ✅ | |
+| `pkg/xxx` | `FuncName2()` | ✅ | ❌ | テスト未作成 |
+| `pkg/xxx` | エッジケース: nil入力 | ❌ | ❌ | 要追加 |
 
 ---
 
@@ -314,8 +312,7 @@ gh api repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/reviews \
   - 依存ライブラリ: 既知のCVEを持つバージョンの使用
   - 暗号化: 非推奨アルゴリズムの使用、不適切な乱数生成
   - エラーハンドリング: スタックトレースやシステム情報の外部露出
-  - CORS・ヘッダー設定: セキュリティヘッダーの欠落、過度に緩いCORS設定
-  - シリアライゼーション: 安全でないデシリアライゼーション、信頼できない入力の処理
+  - 並行処理: レースコンディション、不適切なロック、goroutine リーク
 -->
 
 ### 🔴 Critical
@@ -331,29 +328,24 @@ gh api repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/reviews \
 |-------------|:----:|------|
 | SQLインジェクション対策 | ✅ / ❌ / N/A | |
 | XSS対策 | ✅ / ❌ / N/A | |
-| CSRF対策 | ✅ / ❌ / N/A | |
 | 認証・認可の適切な実装 | ✅ / ❌ / N/A | |
 | 機密情報のハードコーディング | ✅ / ❌ / N/A | |
 | 機密情報のログ出力 | ✅ / ❌ / N/A | |
 | 依存ライブラリの既知脆弱性 | ✅ / ❌ / N/A | |
 | エラー情報の外部露出 | ✅ / ❌ / N/A | |
-| 安全でないデシリアライゼーション | ✅ / ❌ / N/A | |
-| CORS設定の適切さ | ✅ / ❌ / N/A | |
-| セキュリティヘッダーの設定 | ✅ / ❌ / N/A | |
-| 暗号化アルゴリズムの適切さ | ✅ / ❌ / N/A | |
+| 並行処理の安全性 | ✅ / ❌ / N/A | |
+| goroutine リーク | ✅ / ❌ / N/A | |
 
 ---
 
 ## ドキュメントレビュー
 
 <!-- 以下の観点を中心にレビューする:
-  - Javadoc/KDoc: 公開API（public/protected）にドキュメントがあるか、パラメータ・戻り値・例外の説明が正確か
-  - README: 新機能・変更に対応するREADMEの更新があるか、セットアップ手順が最新か
+  - GoDoc: 公開 API（エクスポートされた型・関数・メソッド）にドキュメントがあるか、パラメータ・戻り値の説明が正確か
+  - README: 新機能・変更に対応する README の更新があるか、セットアップ手順が最新か
   - CHANGELOG: 変更履歴が適切に記録されているか
-  - 設定ドキュメント: application.yml等のプロパティに説明があるか、カスタム設定の使用例が示されているか
-  - APIドキュメント: エンドポイントの仕様（リクエスト/レスポンス）が記載されているか
+  - 設定ドキュメント: 設定ファイル・環境変数の説明があるか、使用例が示されているか
   - コード内コメント: 複雑なロジックに対して意図を説明するコメントがあるか、不正確・陳腐化したコメントがないか
-  - マイグレーションガイド: 破壊的変更がある場合、移行手順が文書化されているか
 -->
 
 ### 🔴 Critical
@@ -365,12 +357,10 @@ gh api repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}/reviews \
 
 | 対象 | 状態 | 備考 |
 |------|:----:|------|
-| 公開APIのJavadoc/KDoc | ✅ / ⚠️ / ❌ | |
+| 公開APIのGoDoc | ✅ / ⚠️ / ❌ | |
 | README更新 | ✅ / ⚠️ / ❌ / N/A | |
 | CHANGELOG更新 | ✅ / ⚠️ / ❌ / N/A | |
-| 設定プロパティの説明 | ✅ / ⚠️ / ❌ / N/A | |
-| APIエンドポイント仕様 | ✅ / ⚠️ / ❌ / N/A | |
-| マイグレーションガイド | ✅ / ⚠️ / ❌ / N/A | |
+| 設定・環境変数の説明 | ✅ / ⚠️ / ❌ / N/A | |
 | コード内コメントの正確性 | ✅ / ⚠️ / ❌ | |
 
 ---

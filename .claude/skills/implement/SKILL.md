@@ -12,7 +12,6 @@ argument-hint: "<markdown-file-path> [--branch <branch-name>]"
 
 - 引数 `$ARGUMENTS` に Markdown ファイルのパスが指定されていること（必須）
 - `gh` CLI が認証済みであること（PR 作成時）
-- コーディングガイドライン `.claude/guidelines/coding.md` に準拠すること
 
 ## 引数
 
@@ -49,11 +48,7 @@ ARGUMENTS = "$ARGUMENTS"
 - **レビュー指摘の場合**: 指摘事項、修正案、対象ファイル・行番号を把握する
 - **その他の Markdown**: 記述された要件・仕様を把握する
 
-### 3. コーディングガイドラインの読み込み
-
-`.claude/guidelines/coding.md` を読み込み、ガイドラインの内容を把握する。以降のコード実装はすべてこのガイドラインに準拠すること。
-
-### 4. ブランチの準備
+### 3. ブランチの準備
 
 #### `--branch` なしの場合（新規実装）
 
@@ -67,7 +62,7 @@ git pull origin main
 
 2. Markdown の内容からブランチ名を自動生成する
    - 実装プランの場合: `feat/<issue-number>-<概要のケバブケース>` の形式
-     - 例: Issue #42 "Add WebFlux support" → `feat/42-add-webflux-support`
+     - 例: Issue #42 "Add middleware support" → `feat/42-add-middleware-support`
    - レビュー指摘修正の場合: `fix/<issue-number>-<概要のケバブケース>` の形式
    - その他: `feat/<概要のケバブケース>` の形式
 
@@ -86,47 +81,51 @@ git checkout <branch-name>
 git pull origin <branch-name>
 ```
 
-### 5. コードの実装
+### 4. コードの実装
 
 Markdown の内容に基づいてコードを実装する。
 
 #### 実装時の注意事項
 
-- `.claude/guidelines/coding.md` のコーディングガイドラインに厳密に準拠すること
 - 既存のコードベースのパターン・命名規則に従うこと
-- `CLAUDE.md` に記載されたアーキテクチャとモジュール構成を遵守すること
+- `CLAUDE.md` に記載されたアーキテクチャとパッケージ構成を遵守すること
 - 実装プランがある場合は Phase / Step の順序に従って段階的に実装すること
 - 各ステップの実装後、コンパイルエラーがないことを確認すること
 
 #### 実装の進め方
 
-1. **プロダクトコードの実装**: 新規クラスの作成、既存クラスの修正
+1. **プロダクトコードの実装**: 新規ファイルの作成、既存ファイルの修正
 2. **テストコードの実装**: ユニットテスト、統合テストの作成
-3. **設定ファイルの更新**: Auto-configuration 登録、プロパティメタデータなど
-4. **ドキュメントの更新**: Javadoc、README、CLAUDE.md など（Markdown に記載がある場合）
+3. **ドキュメントの更新**: GoDoc コメント、README、CLAUDE.md など（Markdown に記載がある場合）
 
-### 6. ビルドとフォーマットの確認
+### 5. ビルドとフォーマットの確認
 
 実装完了後、以下を実行する:
 
 ```bash
-# Google Java Format の適用
-./gradlew spotlessApply
+# フォーマットの確認と適用
+go fmt ./...
 
-# ビルドとテストの実行
-./gradlew build
+# 静的解析
+go vet ./...
+
+# ビルドの確認
+go build ./...
+
+# テストの実行
+go test ./...
 ```
 
-- `spotlessApply` は必ずコミット前に実行すること
-- `build` が失敗した場合は原因を特定し修正すること。修正後に再度 `build` を実行し、成功するまで繰り返す
+- `go fmt` は必ずコミット前に実行すること
+- ビルドやテストが失敗した場合は原因を特定し修正すること。修正後に再度実行し、成功するまで繰り返す
 
-### 7. コミット
+### 6. コミット
 
 変更内容をコミットする。
 
 - コミットメッセージは変更内容を適切に要約すること
 - 実装プランの場合は Issue 番号をコミットメッセージに含めること
-  - 例: `Close #42: Add WebFlux support`
+  - 例: `Close #42: Add middleware support`
 - レビュー指摘修正の場合は修正内容を簡潔に記載すること
   - 例: `Fix review comments: improve error handling and add missing tests`
 - 複数の論理的なまとまりがある場合は、適切にコミットを分割すること
@@ -141,7 +140,7 @@ EOF
 )"
 ```
 
-### 8. Push と PR 作成
+### 7. Push と PR 作成
 
 #### `--branch` なしの場合（新規実装）
 
@@ -187,5 +186,4 @@ git push origin <branch-name>
 - 推測ではなく、実際のコードを読んで確認した事実に基づいて実装すること
 - 実装中に不明点や判断が必要な事項があればユーザーに確認すること
 - ビルドが通らない状態でコミット・Push しないこと
-- `spotlessApply` を忘れずに実行すること
-- コーディングガイドライン違反がないことを実装中に常に確認すること
+- `go fmt` を忘れずに実行すること
