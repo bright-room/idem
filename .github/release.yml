@@ -1,0 +1,29 @@
+changelog:
+  exclude:
+    labels:
+      - "Close: Duplicate"
+      - "Close: Invalid"
+      - "Close: Wontfix"
+      - "Type: Publishing"
+      - "Type: Test"
+      - "Release note ignored"
+  categories:
+    - title: New Features 🎉
+      labels:
+        - "Type: Feature"
+    - title: Enhancement Updates 💪
+      labels:
+        - "Type: Enhancement"
+    - title: Breaking Changes 🤯
+      labels:
+        - "Type: Specification Change"
+    - title: Bug Fix 💊
+      labels:
+        - "Type: Bug"
+    - title: dependency updates 🛠
+      labels:
+        - "dependencies"
+        - "renovate"
+    - title: Other Changes
+      labels:
+        - "*"
