@@ -1,0 +1,6 @@
+coverage:
+  path: coverage.out
+
+comment:
+  enable: true
+  hide_footer_link: false
