@@ -1,2 +1,138 @@
 # idem
+
 Idempotency key middleware for Go HTTP applications.
+
+> **"One header, zero duplicates."**
+> — Prevent duplicate request execution with a single HTTP header.
+
+## Features
+
+- **Framework-agnostic** — Built on `net/http`, works with Gin, Echo, Chi, and any compatible router
+- **Pluggable storage** — Interface-based design with built-in memory and Redis implementations
+- **Zero config** — Works out of the box with sensible defaults
+- **Lightweight** — Minimal API surface, just wrap your handler
+
+## Installation
+
+```sh
+go get github.com/bright-room/idem
+```
+
+## Quick Start
+
+```go
+package main
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/bright-room/idem"
+)
+
+func main() {
+	mw := idem.New()
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "order created")
+	})
+
+	http.Handle("/orders", mw.Handler()(handler))
+	http.ListenAndServe(":8080", nil)
+}
+```
+
+Send a request with the `Idempotency-Key` header:
+
+```sh
+curl -X POST http://localhost:8080/orders \
+  -H "Idempotency-Key: abc-123"
+```
+
+The first request executes the handler and caches the response. Subsequent requests with the same key return the cached response without re-executing the handler.
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `WithKeyHeader(h)` | `"Idempotency-Key"` | Header name to read the idempotency key from |
+| `WithTTL(d)` | `24h` | Cache duration for stored responses |
+| `WithStorage(s)` | In-memory | Storage backend for cached responses |
+
+```go
+mw := idem.New(
+	idem.WithKeyHeader("X-Request-Id"),
+	idem.WithTTL(1 * time.Hour),
+	idem.WithStorage(redisStore),
+)
+```
+
+## How It Works
+
+```
+Request
+  │
+  ▼
+[Middleware]
+  ├─ Extract Idempotency-Key header
+  ├─ Look up key in Storage
+  │     ├─ Hit  → Return cached response immediately
+  │     └─ Miss → Pass to next handler
+  │
+  ▼
+[Handler executes]
+  │
+  ▼
+[Middleware (post-response)]
+  └─ Store response in Storage with TTL
+```
+
+Requests without an `Idempotency-Key` header pass through the middleware unchanged.
+
+## Storage
+
+### In-memory (default)
+
+Used automatically when no storage is specified. Suitable for development, testing, and single-instance deployments.
+
+```go
+mw := idem.New() // uses in-memory storage
+```
+
+### Redis
+
+For multi-instance deployments where idempotency state must be shared across processes.
+
+```go
+import (
+	"github.com/bright-room/idem"
+	idemredis "github.com/bright-room/idem/redis"
+	goredis "github.com/redis/go-redis/v9"
+)
+
+client := goredis.NewClient(&goredis.Options{Addr: "localhost:6379"})
+store := idemredis.New(client)
+
+mw := idem.New(idem.WithStorage(store))
+```
+
+### Custom Storage
+
+Implement the `Storage` interface to use any backend:
+
+```go
+type Storage interface {
+	Get(ctx context.Context, key string) (*idem.Response, error)
+	Set(ctx context.Context, key string, res *idem.Response, ttl time.Duration) error
+}
+```
+
+## Roadmap
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| v0.1 | Planned | Core middleware + in-memory storage |
+| v0.2 | Planned | Redis storage |
+| v0.3 | Planned | Framework examples (Gin / Echo / Chi) |
+| v0.4 | Planned | Concurrent request handling (lock mechanism) |
+| v1.0 | Planned | Documentation + stable release |
