@@ -53,7 +53,9 @@ func WithLockPrefix(prefix string) Option {
 }
 
 // New creates a new Redis Storage.
-func New(client goredis.Cmdable, opts ...Option) *Storage {
+// It returns an error if the configuration is invalid
+// (e.g. empty keyPrefix or lockPrefix).
+func New(client goredis.Cmdable, opts ...Option) (*Storage, error) {
 	s := &Storage{
 		client:     client,
 		keyPrefix:  defaultKeyPrefix,
@@ -62,7 +64,25 @@ func New(client goredis.Cmdable, opts ...Option) *Storage {
 	for _, opt := range opts {
 		opt(s)
 	}
-	return s
+
+	if err := s.validate(); err != nil {
+		return nil, err
+	}
+
+	return s, nil
+}
+
+// validate checks the Storage configuration for invalid values.
+func (s *Storage) validate() error {
+	if s.keyPrefix == "" {
+		return errors.New("redis: keyPrefix must not be empty")
+	}
+
+	if s.lockPrefix == "" {
+		return errors.New("redis: lockPrefix must not be empty")
+	}
+
+	return nil
 }
 
 // Get returns the cached response for the given key.

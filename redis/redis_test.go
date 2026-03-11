@@ -32,9 +32,60 @@ func newTestClient(t *testing.T) goredis.Cmdable {
 	return client
 }
 
+func newTestStorage(t *testing.T, client goredis.Cmdable, opts ...iredis.Option) *iredis.Storage {
+	t.Helper()
+
+	s, err := iredis.New(client, opts...)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	return s
+}
+
+func TestNew(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts default config", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := iredis.New(nil)
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+	})
+
+	t.Run("accepts valid custom prefixes", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := iredis.New(nil, iredis.WithKeyPrefix("custom:"), iredis.WithLockPrefix("custom:lock:"))
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+	})
+
+	t.Run("returns error for empty keyPrefix", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := iredis.New(nil, iredis.WithKeyPrefix(""))
+		if err == nil {
+			t.Fatal("New() error = nil, want error")
+		}
+	})
+
+	t.Run("returns error for empty lockPrefix", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := iredis.New(nil, iredis.WithLockPrefix(""))
+		if err == nil {
+			t.Fatal("New() error = nil, want error")
+		}
+	})
+}
+
 func TestIntegration_Storage_SetAndGet(t *testing.T) {
 	client := newTestClient(t)
-	s := iredis.New(client)
+	s := newTestStorage(t, client)
 	ctx := context.Background()
 	key := "test-set-and-get"
 
@@ -71,7 +122,7 @@ func TestIntegration_Storage_SetAndGet(t *testing.T) {
 
 func TestIntegration_Storage_GetReturnsNilForNonExistentKey(t *testing.T) {
 	client := newTestClient(t)
-	s := iredis.New(client)
+	s := newTestStorage(t, client)
 
 	got, err := s.Get(context.Background(), "non-existent-key")
 	if err != nil {
@@ -84,7 +135,7 @@ func TestIntegration_Storage_GetReturnsNilForNonExistentKey(t *testing.T) {
 
 func TestIntegration_Storage_GetReturnsNilAfterTTLExpired(t *testing.T) {
 	client := newTestClient(t)
-	s := iredis.New(client)
+	s := newTestStorage(t, client)
 	ctx := context.Background()
 	key := "test-ttl-expired"
 
@@ -113,7 +164,7 @@ func TestIntegration_Storage_GetReturnsNilAfterTTLExpired(t *testing.T) {
 func TestIntegration_Storage_WithKeyPrefix(t *testing.T) {
 	client := newTestClient(t)
 	prefix := "custom:"
-	s := iredis.New(client, iredis.WithKeyPrefix(prefix))
+	s := newTestStorage(t, client, iredis.WithKeyPrefix(prefix))
 	ctx := context.Background()
 	key := "test-prefix"
 
@@ -147,7 +198,7 @@ func TestIntegration_Storage_WithKeyPrefix(t *testing.T) {
 
 func TestIntegration_Storage_Delete(t *testing.T) {
 	client := newTestClient(t)
-	s := iredis.New(client)
+	s := newTestStorage(t, client)
 	ctx := context.Background()
 	key := "test-delete"
 
@@ -178,7 +229,7 @@ func TestIntegration_Storage_Delete(t *testing.T) {
 
 func TestIntegration_Storage_DeleteNonExistentKey(t *testing.T) {
 	client := newTestClient(t)
-	s := iredis.New(client)
+	s := newTestStorage(t, client)
 
 	if err := s.Delete(context.Background(), "non-existent-delete-key"); err != nil {
 		t.Errorf("Delete() error = %v, want nil", err)
@@ -188,7 +239,7 @@ func TestIntegration_Storage_DeleteNonExistentKey(t *testing.T) {
 func TestIntegration_Storage_DeleteWithKeyPrefix(t *testing.T) {
 	client := newTestClient(t)
 	prefix := "custom:"
-	s := iredis.New(client, iredis.WithKeyPrefix(prefix))
+	s := newTestStorage(t, client, iredis.WithKeyPrefix(prefix))
 	ctx := context.Background()
 	key := "test-delete-prefix"
 
@@ -224,7 +275,7 @@ func TestIntegration_Storage_GetReturnsErrorOnConnectionFailure(t *testing.T) {
 	client := goredis.NewClient(&goredis.Options{Addr: "localhost:1"})
 	t.Cleanup(func() { _ = client.Close() })
 
-	s := iredis.New(client)
+	s := newTestStorage(t, client)
 
 	_, err := s.Get(context.Background(), "any-key")
 	if err == nil {
@@ -234,7 +285,7 @@ func TestIntegration_Storage_GetReturnsErrorOnConnectionFailure(t *testing.T) {
 
 func TestIntegration_Storage_LockAndUnlock(t *testing.T) {
 	client := newTestClient(t)
-	s := iredis.New(client)
+	s := newTestStorage(t, client)
 	ctx := context.Background()
 	key := "test-lock-basic"
 
@@ -250,7 +301,7 @@ func TestIntegration_Storage_LockAndUnlock(t *testing.T) {
 
 func TestIntegration_Storage_LockBlocksConcurrentAccess(t *testing.T) {
 	client := newTestClient(t)
-	s := iredis.New(client)
+	s := newTestStorage(t, client)
 	ctx := context.Background()
 	key := "test-lock-concurrent"
 
@@ -293,7 +344,7 @@ func TestIntegration_Storage_LockBlocksConcurrentAccess(t *testing.T) {
 
 func TestIntegration_Storage_LockRespectsContextCancellation(t *testing.T) {
 	client := newTestClient(t)
-	s := iredis.New(client)
+	s := newTestStorage(t, client)
 	ctx := context.Background()
 	key := "test-lock-cancel"
 
@@ -318,7 +369,7 @@ func TestIntegration_Storage_LockRespectsContextCancellation(t *testing.T) {
 
 func TestIntegration_Storage_LockTTLExpiration(t *testing.T) {
 	client := newTestClient(t)
-	s := iredis.New(client)
+	s := newTestStorage(t, client)
 	ctx := context.Background()
 	key := "test-lock-ttl"
 
@@ -344,7 +395,7 @@ func TestIntegration_Storage_LockTTLExpiration(t *testing.T) {
 func TestIntegration_Storage_ImplementsLocker(t *testing.T) {
 	client := newTestClient(t)
 
-	var s interface{} = iredis.New(client)
+	var s interface{} = newTestStorage(t, client)
 	if _, ok := s.(idem.Locker); !ok {
 		t.Error("redis.Storage does not implement idem.Locker")
 	}
