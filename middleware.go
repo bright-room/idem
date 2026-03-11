@@ -49,16 +49,23 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 			rec := newResponseRecorder(w)
 			next.ServeHTTP(rec, r)
 
-			res := rec.toResponse()
+			rr := rec.(recorder)
+			res := rr.toResponse()
 			if err := m.cfg.storage.Set(r.Context(), key, res, m.cfg.ttl); err != nil {
 				if m.cfg.onError != nil {
 					m.cfg.onError(err)
 				}
 			}
 
-			rec.flush()
+			rr.flush()
 		})
 	}
+}
+
+// recorder provides access to the underlying responseRecorder methods.
+type recorder interface {
+	toResponse() *Response
+	flush()
 }
 
 type responseRecorder struct {
@@ -68,10 +75,44 @@ type responseRecorder struct {
 	written    bool
 }
 
-func newResponseRecorder(w http.ResponseWriter) *responseRecorder {
-	return &responseRecorder{
+// responseRecorderFlusher delegates http.Flusher to the underlying ResponseWriter.
+type responseRecorderFlusher struct {
+	*responseRecorder
+	http.Flusher
+}
+
+// responseRecorderHijacker delegates http.Hijacker to the underlying ResponseWriter.
+type responseRecorderHijacker struct {
+	*responseRecorder
+	http.Hijacker
+}
+
+// responseRecorderFlusherHijacker delegates both http.Flusher and http.Hijacker
+// to the underlying ResponseWriter.
+type responseRecorderFlusherHijacker struct {
+	*responseRecorder
+	http.Flusher
+	http.Hijacker
+}
+
+func newResponseRecorder(w http.ResponseWriter) http.ResponseWriter {
+	rec := &responseRecorder{
 		ResponseWriter: w,
 		statusCode:     http.StatusOK,
+	}
+
+	flusher, canFlush := w.(http.Flusher)
+	hijacker, canHijack := w.(http.Hijacker)
+
+	switch {
+	case canFlush && canHijack:
+		return &responseRecorderFlusherHijacker{rec, flusher, hijacker}
+	case canFlush:
+		return &responseRecorderFlusher{rec, flusher}
+	case canHijack:
+		return &responseRecorderHijacker{rec, hijacker}
+	default:
+		return rec
 	}
 }
 
