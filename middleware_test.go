@@ -215,6 +215,55 @@ func TestMiddleware_Handler(t *testing.T) {
 			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
 		}
 	})
+
+	t.Run("calls onError callback when storage Get fails", func(t *testing.T) {
+		t.Parallel()
+
+		getErr := errors.New("get failed")
+		var gotErr error
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		store := &errorStorage{getErr: getErr}
+		mw := New(WithStorage(store), WithOnError(func(err error) { gotErr = err }))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "err-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req)
+
+		if !errors.Is(gotErr, getErr) {
+			t.Errorf("onError received %v, want %v", gotErr, getErr)
+		}
+	})
+
+	t.Run("calls onError callback when storage Set fails", func(t *testing.T) {
+		t.Parallel()
+
+		setErr := errors.New("set failed")
+		var gotErr error
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		store := &errorStorage{setErr: setErr}
+		mw := New(WithStorage(store), WithOnError(func(err error) { gotErr = err }))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "err-key")
+		rec := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec, req)
+
+		if !errors.Is(gotErr, setErr) {
+			t.Errorf("onError received %v, want %v", gotErr, setErr)
+		}
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+	})
 }
 
 // spyStorage tracks Get/Set call counts.

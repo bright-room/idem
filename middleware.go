@@ -22,6 +22,9 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 
 			cached, err := m.cfg.storage.Get(r.Context(), key)
 			if err != nil {
+				if m.cfg.onError != nil {
+					m.cfg.onError(err)
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -35,7 +38,11 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 			next.ServeHTTP(rec, r)
 
 			res := rec.toResponse()
-			_ = m.cfg.storage.Set(r.Context(), key, res, m.cfg.ttl)
+			if err := m.cfg.storage.Set(r.Context(), key, res, m.cfg.ttl); err != nil {
+				if m.cfg.onError != nil {
+					m.cfg.onError(err)
+				}
+			}
 
 			rec.flush()
 		})
