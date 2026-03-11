@@ -28,7 +28,7 @@ make shell          # Interactive bash in container
 - **Root package (`idem`)**: Core types and middleware — `idem.go`, `middleware.go`, `storage.go`, `response.go`, `option.go`
 - **`memory/`**: In-memory storage implementation
 - **`redis/`**: Redis storage implementation
-- **`_examples/`**: Framework-specific usage examples (Gin available, Echo/Chi planned)
+- **`_examples/`**: Framework-specific usage examples (Gin/Echo available, Chi planned)
 
 Key interfaces:
 - `Storage` — `Get`/`Set` for cached responses (pluggable backend)
