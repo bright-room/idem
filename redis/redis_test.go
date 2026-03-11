@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -156,5 +158,123 @@ func TestIntegration_Storage_GetReturnsErrorOnConnectionFailure(t *testing.T) {
 	_, err := s.Get(context.Background(), "any-key")
 	if err == nil {
 		t.Fatal("Get() error = nil, want connection error")
+	}
+}
+
+func TestIntegration_Storage_LockAndUnlock(t *testing.T) {
+	client := newTestClient(t)
+	s := iredis.New(client)
+	ctx := context.Background()
+	key := "test-lock-basic"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:lock:"+key) })
+
+	unlock, err := s.Lock(ctx, key, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Lock() error = %v", err)
+	}
+
+	unlock()
+}
+
+func TestIntegration_Storage_LockBlocksConcurrentAccess(t *testing.T) {
+	client := newTestClient(t)
+	s := iredis.New(client)
+	ctx := context.Background()
+	key := "test-lock-concurrent"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:lock:"+key) })
+
+	var concurrent atomic.Int32
+	var maxConcurrent atomic.Int32
+
+	var wg sync.WaitGroup
+	const goroutines = 5
+
+	for range goroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			unlock, err := s.Lock(ctx, key, 5*time.Second)
+			if err != nil {
+				t.Errorf("Lock() error = %v", err)
+				return
+			}
+
+			cur := concurrent.Add(1)
+			if cur > maxConcurrent.Load() {
+				maxConcurrent.Store(cur)
+			}
+			time.Sleep(10 * time.Millisecond)
+			concurrent.Add(-1)
+
+			unlock()
+		}()
+	}
+
+	wg.Wait()
+
+	if max := maxConcurrent.Load(); max != 1 {
+		t.Errorf("max concurrent locks = %d, want 1", max)
+	}
+}
+
+func TestIntegration_Storage_LockRespectsContextCancellation(t *testing.T) {
+	client := newTestClient(t)
+	s := iredis.New(client)
+	ctx := context.Background()
+	key := "test-lock-cancel"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:lock:"+key) })
+
+	// Hold the lock
+	unlock, err := s.Lock(ctx, key, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Lock() error = %v", err)
+	}
+	defer unlock()
+
+	// Try to acquire with short timeout
+	cancelCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+
+	_, err = s.Lock(cancelCtx, key, 5*time.Second)
+	if err == nil {
+		t.Fatal("Lock() error = nil, want context error")
+	}
+}
+
+func TestIntegration_Storage_LockTTLExpiration(t *testing.T) {
+	client := newTestClient(t)
+	s := iredis.New(client)
+	ctx := context.Background()
+	key := "test-lock-ttl"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:lock:"+key) })
+
+	// Acquire lock with short TTL (don't unlock manually)
+	_, err := s.Lock(ctx, key, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("first Lock() error = %v", err)
+	}
+
+	// Wait for TTL to expire
+	time.Sleep(300 * time.Millisecond)
+
+	// Should be able to acquire lock now
+	unlock, err := s.Lock(ctx, key, 5*time.Second)
+	if err != nil {
+		t.Fatalf("second Lock() error = %v", err)
+	}
+	unlock()
+}
+
+func TestIntegration_Storage_ImplementsLocker(t *testing.T) {
+	client := newTestClient(t)
+
+	var s interface{} = iredis.New(client)
+	if _, ok := s.(idem.Locker); !ok {
+		t.Error("redis.Storage does not implement idem.Locker")
 	}
 }

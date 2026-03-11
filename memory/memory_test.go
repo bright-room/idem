@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -119,4 +120,117 @@ func TestStorage_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+func TestStorage_Lock(t *testing.T) {
+	t.Parallel()
+
+	t.Run("acquires and releases lock", func(t *testing.T) {
+		t.Parallel()
+
+		s := memory.New()
+		ctx := context.Background()
+
+		unlock, err := s.Lock(ctx, "key-1", time.Hour)
+		if err != nil {
+			t.Fatalf("Lock() error = %v", err)
+		}
+
+		unlock()
+	})
+
+	t.Run("provides mutual exclusion for same key", func(t *testing.T) {
+		t.Parallel()
+
+		s := memory.New()
+		ctx := context.Background()
+
+		var concurrent atomic.Int32
+		var maxConcurrent atomic.Int32
+
+		var wg sync.WaitGroup
+		const goroutines = 10
+
+		for range goroutines {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				unlock, err := s.Lock(ctx, "shared-key", time.Hour)
+				if err != nil {
+					t.Errorf("Lock() error = %v", err)
+					return
+				}
+
+				cur := concurrent.Add(1)
+				if cur > maxConcurrent.Load() {
+					maxConcurrent.Store(cur)
+				}
+				time.Sleep(time.Millisecond)
+				concurrent.Add(-1)
+
+				unlock()
+			}()
+		}
+
+		wg.Wait()
+
+		if max := maxConcurrent.Load(); max != 1 {
+			t.Errorf("max concurrent locks = %d, want 1", max)
+		}
+	})
+
+	t.Run("returns error when context is cancelled", func(t *testing.T) {
+		t.Parallel()
+
+		s := memory.New()
+		ctx := context.Background()
+
+		unlock, err := s.Lock(ctx, "cancel-key", time.Hour)
+		if err != nil {
+			t.Fatalf("Lock() error = %v", err)
+		}
+		defer unlock()
+
+		cancelCtx, cancel := context.WithCancel(ctx)
+		cancel()
+
+		_, err = s.Lock(cancelCtx, "cancel-key", time.Hour)
+		if err == nil {
+			t.Fatal("Lock() error = nil, want context error")
+		}
+
+		if err != context.Canceled {
+			t.Errorf("Lock() error = %v, want %v", err, context.Canceled)
+		}
+	})
+
+	t.Run("allows independent keys to lock concurrently", func(t *testing.T) {
+		t.Parallel()
+
+		s := memory.New()
+		ctx := context.Background()
+
+		unlock1, err := s.Lock(ctx, "key-a", time.Hour)
+		if err != nil {
+			t.Fatalf("Lock(key-a) error = %v", err)
+		}
+
+		unlock2, err := s.Lock(ctx, "key-b", time.Hour)
+		if err != nil {
+			t.Fatalf("Lock(key-b) error = %v", err)
+		}
+
+		unlock1()
+		unlock2()
+	})
+
+	t.Run("implements idem.Locker interface", func(t *testing.T) {
+		t.Parallel()
+
+		var s interface{} = memory.New()
+		if _, ok := s.(idem.Locker); !ok {
+			t.Error("memory.Storage does not implement idem.Locker")
+		}
+	})
 }

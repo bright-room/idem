@@ -79,6 +79,8 @@ Request
   ▼
 [Middleware]
   ├─ Extract Idempotency-Key header
+  ├─ Acquire lock (if Storage implements Locker)
+  │     └─ Fail → Return 409 Conflict
   ├─ Look up key in Storage
   │     ├─ Hit  → Return cached response immediately
   │     └─ Miss → Pass to next handler
@@ -88,10 +90,13 @@ Request
   │
   ▼
 [Middleware (post-response)]
-  └─ Store response in Storage with TTL
+  ├─ Store response in Storage with TTL
+  └─ Release lock
 ```
 
 Requests without an `Idempotency-Key` header pass through the middleware unchanged.
+
+When the `Storage` implementation also implements the `Locker` interface, the middleware acquires a per-key lock before checking the cache. This prevents duplicate handler execution when concurrent requests arrive with the same idempotency key. The built-in memory and Redis storage backends implement `Locker` out of the box.
 
 ## Storage
 
@@ -130,6 +135,16 @@ type Storage interface {
 	Set(ctx context.Context, key string, res *idem.Response, ttl time.Duration) error
 }
 ```
+
+To enable concurrent request locking, also implement the `Locker` interface on your storage:
+
+```go
+type Locker interface {
+	Lock(ctx context.Context, key string, ttl time.Duration) (unlock func(), err error)
+}
+```
+
+If your `Storage` does not implement `Locker`, the middleware operates without locking (v0.1 behavior).
 
 ## Examples
 
@@ -196,5 +211,5 @@ See [`_examples/chi/main.go`](./_examples/chi/main.go) for the full source inclu
 | v0.1 | Planned | Core middleware + in-memory storage |
 | v0.2 | **Done** | Redis storage |
 | v0.3 | **Done** | Framework examples (Gin / Echo / Chi) |
-| v0.4 | Planned | Concurrent request handling (lock mechanism) |
+| v0.4 | **Done** | Concurrent request handling (lock mechanism) |
 | v1.0 | Planned | Documentation + stable release |

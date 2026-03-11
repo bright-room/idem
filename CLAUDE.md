@@ -25,14 +25,14 @@ make shell          # Interactive bash in container
 
 ## Architecture
 
-- **Root package (`idem`)**: Core types and middleware — `idem.go`, `middleware.go`, `storage.go`, `response.go`, `option.go`
+- **Root package (`idem`)**: Core types and middleware — `idem.go`, `middleware.go`, `storage.go`, `locker.go`, `response.go`, `option.go`
 - **`memory/`**: In-memory storage implementation
 - **`redis/`**: Redis storage implementation
 - **`_examples/`**: Framework-specific usage examples (Gin, Echo, Chi)
 
 Key interfaces:
 - `Storage` — `Get`/`Set` for cached responses (pluggable backend)
-- `Locker` — distributed locking for concurrent request handling (planned v0.4)
+- `Locker` — optional per-key mutual exclusion for concurrent request handling. Storage implementations that also implement `Locker` enable automatic lock acquisition in the middleware. Returns 409 Conflict on lock failure.
 
 Configuration uses the **Functional Options** pattern (`WithXxx()` functions).
 
