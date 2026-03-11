@@ -132,7 +132,7 @@ type Storage interface {
 | Phase | Status | Description |
 |-------|--------|-------------|
 | v0.1 | Planned | Core middleware + in-memory storage |
-| v0.2 | Planned | Redis storage |
+| v0.2 | **Done** | Redis storage |
 | v0.3 | Planned | Framework examples (Gin / Echo / Chi) |
 | v0.4 | Planned | Concurrent request handling (lock mechanism) |
 | v1.0 | Planned | Documentation + stable release |

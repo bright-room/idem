@@ -1,0 +1,5 @@
+coverage:
+  path: coverage-integration.out
+
+comment:
+  enable: false
