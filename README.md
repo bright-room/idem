@@ -25,13 +25,17 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/bright-room/idem"
 )
 
 func main() {
-	mw := idem.New()
+	mw, err := idem.New()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "order created")
@@ -61,7 +65,7 @@ The first request executes the handler and caches the response. Subsequent reque
 | `WithOnError(fn)` | `nil` | Callback invoked when a storage operation fails |
 
 ```go
-mw := idem.New(
+mw, err := idem.New(
 	idem.WithKeyHeader("X-Request-Id"),
 	idem.WithTTL(1 * time.Hour),
 	idem.WithStorage(redisStore),
@@ -69,7 +73,12 @@ mw := idem.New(
 		log.Printf("storage error: %v", err)
 	}),
 )
+if err != nil {
+	log.Fatal(err)
+}
 ```
+
+`New` validates the configuration and returns an error for invalid values such as an empty key header or a non-positive TTL.
 
 ## How It Works
 
@@ -105,7 +114,7 @@ When the `Storage` implementation also implements the `Locker` interface, the mi
 Used automatically when no storage is specified. Suitable for development, testing, and single-instance deployments.
 
 ```go
-mw := idem.New() // uses in-memory storage
+mw, err := idem.New() // uses in-memory storage
 ```
 
 ### Redis
@@ -122,7 +131,7 @@ import (
 client := goredis.NewClient(&goredis.Options{Addr: "localhost:6379"})
 store := idemredis.New(client)
 
-mw := idem.New(idem.WithStorage(store))
+mw, err := idem.New(idem.WithStorage(store))
 ```
 
 ### Custom Storage

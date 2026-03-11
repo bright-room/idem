@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync/atomic"
 
@@ -12,7 +13,10 @@ import (
 )
 
 func main() {
-	idempotency := idem.New()
+	idempotency, err := idem.New()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)

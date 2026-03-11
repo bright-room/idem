@@ -22,7 +22,7 @@ func TestMiddleware_Handler(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 
-		mw := New()
+		mw := newTestMiddleware(t)
 		wrapped := mw.Handler()(handler)
 
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -49,7 +49,7 @@ func TestMiddleware_Handler(t *testing.T) {
 			_, _ = w.Write([]byte(`{"id":1}`))
 		})
 
-		mw := New()
+		mw := newTestMiddleware(t)
 		wrapped := mw.Handler()(handler)
 
 		// First request
@@ -99,7 +99,7 @@ func TestMiddleware_Handler(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 
-		mw := New()
+		mw := newTestMiddleware(t)
 		wrapped := mw.Handler()(handler)
 
 		for _, key := range []string{"key-a", "key-b", "key-c"} {
@@ -123,7 +123,7 @@ func TestMiddleware_Handler(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 
-		mw := New(WithKeyHeader("X-Request-Id"))
+		mw := newTestMiddleware(t, WithKeyHeader("X-Request-Id"))
 		wrapped := mw.Handler()(handler)
 
 		req1 := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -148,7 +148,7 @@ func TestMiddleware_Handler(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 
-		mw := New(WithTTL(time.Nanosecond))
+		mw := newTestMiddleware(t, WithTTL(time.Nanosecond))
 		wrapped := mw.Handler()(handler)
 
 		req1 := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -174,7 +174,7 @@ func TestMiddleware_Handler(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 
-		mw := New(WithStorage(store))
+		mw := newTestMiddleware(t, WithStorage(store))
 		wrapped := mw.Handler()(handler)
 
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -200,7 +200,7 @@ func TestMiddleware_Handler(t *testing.T) {
 		})
 
 		store := &errorStorage{getErr: errors.New("storage unavailable")}
-		mw := New(WithStorage(store))
+		mw := newTestMiddleware(t, WithStorage(store))
 		wrapped := mw.Handler()(handler)
 
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -227,7 +227,7 @@ func TestMiddleware_Handler(t *testing.T) {
 		})
 
 		store := &errorStorage{getErr: getErr}
-		mw := New(WithStorage(store), WithOnError(func(err error) { gotErr = err }))
+		mw := newTestMiddleware(t, WithStorage(store), WithOnError(func(err error) { gotErr = err }))
 		wrapped := mw.Handler()(handler)
 
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -249,7 +249,7 @@ func TestMiddleware_Handler(t *testing.T) {
 		})
 
 		store := &errorStorage{setErr: setErr}
-		mw := New(WithStorage(store), WithOnError(func(err error) { gotErr = err }))
+		mw := newTestMiddleware(t, WithStorage(store), WithOnError(func(err error) { gotErr = err }))
 		wrapped := mw.Handler()(handler)
 
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -274,7 +274,7 @@ func TestMiddleware_Handler(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 
-		mw := New(WithStorage(store))
+		mw := newTestMiddleware(t, WithStorage(store))
 		wrapped := mw.Handler()(handler)
 
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -301,7 +301,7 @@ func TestMiddleware_Handler(t *testing.T) {
 
 		lockErr := errors.New("lock failed")
 		store := &errorLockerStorage{lockErr: lockErr}
-		mw := New(WithStorage(store))
+		mw := newTestMiddleware(t, WithStorage(store))
 		wrapped := mw.Handler()(handler)
 
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -328,7 +328,7 @@ func TestMiddleware_Handler(t *testing.T) {
 		})
 
 		store := &errorLockerStorage{lockErr: lockErr}
-		mw := New(WithStorage(store), WithOnError(func(err error) { gotErr = err }))
+		mw := newTestMiddleware(t, WithStorage(store), WithOnError(func(err error) { gotErr = err }))
 		wrapped := mw.Handler()(handler)
 
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -355,7 +355,7 @@ func TestMiddleware_Handler(t *testing.T) {
 		})
 
 		store := NewMemoryStorage()
-		mw := New(WithStorage(store))
+		mw := newTestMiddleware(t, WithStorage(store))
 		wrapped := mw.Handler()(handler)
 
 		var wg sync.WaitGroup
@@ -383,6 +383,18 @@ func TestMiddleware_Handler(t *testing.T) {
 			t.Errorf("handler call count = %d, want 1", count)
 		}
 	})
+}
+
+// newTestMiddleware creates a Middleware with default options, failing the test on error.
+func newTestMiddleware(t *testing.T, opts ...Option) *Middleware {
+	t.Helper()
+
+	mw, err := New(opts...)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	return mw
 }
 
 // spyStorage tracks Get/Set/Delete call counts.
