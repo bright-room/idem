@@ -25,7 +25,7 @@ func newTestClient(t *testing.T) goredis.Cmdable {
 	}
 
 	client := goredis.NewClient(&goredis.Options{Addr: addr})
-	t.Cleanup(func() { client.Close() })
+	t.Cleanup(func() { _ = client.Close() })
 
 	return client
 }
@@ -149,7 +149,7 @@ func TestIntegration_Storage_GetReturnsErrorOnConnectionFailure(t *testing.T) {
 	}
 
 	client := goredis.NewClient(&goredis.Options{Addr: "localhost:1"})
-	t.Cleanup(func() { client.Close() })
+	t.Cleanup(func() { _ = client.Close() })
 
 	s := iredis.New(client)
 
