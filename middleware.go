@@ -27,6 +27,9 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 					if m.cfg.onError != nil {
 						m.cfg.onError(err)
 					}
+					if m.cfg.metrics != nil && m.cfg.metrics.OnError != nil {
+						m.cfg.metrics.OnError(key, err)
+					}
 					http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
 					return
 				}
@@ -38,13 +41,23 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 				if m.cfg.onError != nil {
 					m.cfg.onError(err)
 				}
+				if m.cfg.metrics != nil && m.cfg.metrics.OnError != nil {
+					m.cfg.metrics.OnError(key, err)
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			if cached != nil {
+				if m.cfg.metrics != nil && m.cfg.metrics.OnCacheHit != nil {
+					m.cfg.metrics.OnCacheHit(key)
+				}
 				writeResponse(w, cached)
 				return
+			}
+
+			if m.cfg.metrics != nil && m.cfg.metrics.OnCacheMiss != nil {
+				m.cfg.metrics.OnCacheMiss(key)
 			}
 
 			rec := newResponseRecorder(w)
@@ -55,6 +68,9 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 			if err := m.cfg.storage.Set(r.Context(), key, res, m.cfg.ttl); err != nil {
 				if m.cfg.onError != nil {
 					m.cfg.onError(err)
+				}
+				if m.cfg.metrics != nil && m.cfg.metrics.OnError != nil {
+					m.cfg.metrics.OnError(key, err)
 				}
 			}
 

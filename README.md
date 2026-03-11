@@ -64,6 +64,7 @@ The first request executes the handler and caches the response. Subsequent reque
 | `WithTTL(d)` | `24h` | Cache duration for stored responses |
 | `WithStorage(s)` | In-memory | Storage backend for cached responses |
 | `WithOnError(fn)` | `nil` | Callback invoked when a storage operation fails |
+| `WithMetrics(m)` | `nil` | Callbacks for observing cache hits, misses, and errors |
 
 ```go
 mw, err := idem.New(
@@ -80,6 +81,28 @@ if err != nil {
 ```
 
 `New` validates the configuration and returns an error for invalid values such as an empty key header or a non-positive TTL.
+
+### Metrics
+
+Use `WithMetrics` to observe cache hits, misses, and errors — for example, to export to Prometheus:
+
+```go
+mw, err := idem.New(
+	idem.WithMetrics(idem.Metrics{
+		OnCacheHit: func(key string) {
+			cacheHits.WithLabelValues(key).Inc()
+		},
+		OnCacheMiss: func(key string) {
+			cacheMisses.WithLabelValues(key).Inc()
+		},
+		OnError: func(key string, err error) {
+			cacheErrors.WithLabelValues(key).Inc()
+		},
+	}),
+)
+```
+
+All callback fields are optional — nil callbacks are never invoked and add no overhead. Requests without an idempotency key bypass the middleware entirely and do not trigger any metrics callbacks.
 
 ## How It Works
 
@@ -226,4 +249,5 @@ See [`_examples/chi/main.go`](./_examples/chi/main.go) for the full source inclu
 | v0.2 | **Done** | Redis storage |
 | v0.3 | **Done** | Framework examples (Gin / Echo / Chi) |
 | v0.4 | **Done** | Concurrent request handling (lock mechanism) |
+| v0.5 | **Done** | Metrics hooks (cache hit/miss/error callbacks) |
 | v1.0 | Planned | Documentation + stable release |

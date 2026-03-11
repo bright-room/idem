@@ -18,6 +18,7 @@ type config struct {
 	ttl       time.Duration
 	storage   Storage
 	onError   func(error)
+	metrics   *Metrics
 }
 
 // defaultConfig returns a config with sensible defaults.
