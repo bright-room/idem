@@ -344,6 +344,201 @@ func TestMiddleware_Handler(t *testing.T) {
 		}
 	})
 
+	t.Run("calls OnCacheMiss on first request and OnCacheHit on second", func(t *testing.T) {
+		t.Parallel()
+
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		var hitKey, missKey string
+		mw := newTestMiddleware(t, WithMetrics(Metrics{
+			OnCacheHit:  func(key string) { hitKey = key },
+			OnCacheMiss: func(key string) { missKey = key },
+		}))
+		wrapped := mw.Handler()(handler)
+
+		// First request — cache miss
+		req1 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req1.Header.Set("Idempotency-Key", "metrics-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req1)
+
+		if missKey != "metrics-key" {
+			t.Errorf("OnCacheMiss key = %q, want %q", missKey, "metrics-key")
+		}
+
+		if hitKey != "" {
+			t.Errorf("OnCacheHit key = %q, want empty on first request", hitKey)
+		}
+
+		// Second request — cache hit
+		req2 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req2.Header.Set("Idempotency-Key", "metrics-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req2)
+
+		if hitKey != "metrics-key" {
+			t.Errorf("OnCacheHit key = %q, want %q", hitKey, "metrics-key")
+		}
+	})
+
+	t.Run("calls Metrics.OnError when storage Get fails", func(t *testing.T) {
+		t.Parallel()
+
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		getErr := errors.New("get failed")
+		var gotKey string
+		var gotErr error
+		store := &errorStorage{getErr: getErr}
+		mw := newTestMiddleware(t, WithStorage(store), WithMetrics(Metrics{
+			OnError: func(key string, err error) {
+				gotKey = key
+				gotErr = err
+			},
+		}))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "err-get-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req)
+
+		if gotKey != "err-get-key" {
+			t.Errorf("OnError key = %q, want %q", gotKey, "err-get-key")
+		}
+
+		if !errors.Is(gotErr, getErr) {
+			t.Errorf("OnError err = %v, want %v", gotErr, getErr)
+		}
+	})
+
+	t.Run("calls Metrics.OnError when storage Set fails", func(t *testing.T) {
+		t.Parallel()
+
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		setErr := errors.New("set failed")
+		var gotKey string
+		var gotErr error
+		store := &errorStorage{setErr: setErr}
+		mw := newTestMiddleware(t, WithStorage(store), WithMetrics(Metrics{
+			OnError: func(key string, err error) {
+				gotKey = key
+				gotErr = err
+			},
+		}))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "err-set-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req)
+
+		if gotKey != "err-set-key" {
+			t.Errorf("OnError key = %q, want %q", gotKey, "err-set-key")
+		}
+
+		if !errors.Is(gotErr, setErr) {
+			t.Errorf("OnError err = %v, want %v", gotErr, setErr)
+		}
+	})
+
+	t.Run("calls Metrics.OnError when lock acquisition fails", func(t *testing.T) {
+		t.Parallel()
+
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		lockErr := errors.New("lock failed")
+		var gotKey string
+		var gotErr error
+		store := &errorLockerStorage{lockErr: lockErr}
+		mw := newTestMiddleware(t, WithStorage(store), WithMetrics(Metrics{
+			OnError: func(key string, err error) {
+				gotKey = key
+				gotErr = err
+			},
+		}))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "err-lock-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req)
+
+		if gotKey != "err-lock-key" {
+			t.Errorf("OnError key = %q, want %q", gotKey, "err-lock-key")
+		}
+
+		if !errors.Is(gotErr, lockErr) {
+			t.Errorf("OnError err = %v, want %v", gotErr, lockErr)
+		}
+	})
+
+	t.Run("calls both WithOnError and Metrics.OnError on storage Get failure", func(t *testing.T) {
+		t.Parallel()
+
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		getErr := errors.New("get failed")
+		var onErrorCalled bool
+		var metricsErrorCalled bool
+		store := &errorStorage{getErr: getErr}
+		mw := newTestMiddleware(t,
+			WithStorage(store),
+			WithOnError(func(_ error) { onErrorCalled = true }),
+			WithMetrics(Metrics{
+				OnError: func(_ string, _ error) { metricsErrorCalled = true },
+			}),
+		)
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "both-err-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req)
+
+		if !onErrorCalled {
+			t.Error("WithOnError callback was not called")
+		}
+
+		if !metricsErrorCalled {
+			t.Error("Metrics.OnError callback was not called")
+		}
+	})
+
+	t.Run("does not panic with nil callback fields in Metrics", func(t *testing.T) {
+		t.Parallel()
+
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		// Only OnCacheMiss is set; OnCacheHit and OnError are nil
+		var missKey string
+		mw := newTestMiddleware(t, WithMetrics(Metrics{
+			OnCacheMiss: func(key string) { missKey = key },
+		}))
+		wrapped := mw.Handler()(handler)
+
+		// First request — triggers OnCacheMiss, skips nil OnCacheHit/OnError
+		req1 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req1.Header.Set("Idempotency-Key", "partial-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req1)
+
+		if missKey != "partial-key" {
+			t.Errorf("OnCacheMiss key = %q, want %q", missKey, "partial-key")
+		}
+
+		// Second request — triggers nil OnCacheHit without panic
+		req2 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req2.Header.Set("Idempotency-Key", "partial-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req2)
+	})
+
 	t.Run("concurrent requests with same key execute handler only once", func(t *testing.T) {
 		t.Parallel()
 
