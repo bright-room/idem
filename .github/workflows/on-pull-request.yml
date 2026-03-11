@@ -83,7 +83,7 @@ jobs:
           gotestsum \
             --junitfile integration-test-report.xml \
             --format testdox \
-            -- -run Integration -count=1 ./...
+            -- -run Integration -count=1 -coverprofile=coverage-integration.out ./...
 
       - name: Test Report
         uses: dorny/test-reporter@v1
@@ -92,3 +92,9 @@ jobs:
           name: Integration Test Report
           path: integration-test-report.xml
           reporter: java-junit
+
+      - name: Coverage Report
+        uses: k1LoW/octocov-action@v1
+        if: always()
+        with:
+          config: .octocov.integration.yml
