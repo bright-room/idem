@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"sync/atomic"
 
@@ -10,7 +11,10 @@ import (
 )
 
 func main() {
-	idempotency := idem.New()
+	idempotency, err := idem.New()
+	if err != nil {
+		log.Fatal(err)
+	}
 	wrap := wrapMiddleware(idempotency)
 
 	r := gin.Default()

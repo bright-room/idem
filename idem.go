@@ -7,17 +7,23 @@ import (
 )
 
 // New creates a new idempotency Middleware with the given options.
-func New(opts ...Option) *Middleware {
+// It returns an error if the configuration is invalid
+// (e.g. empty keyHeader or non-positive ttl).
+func New(opts ...Option) (*Middleware, error) {
 	cfg := defaultConfig()
 	for _, opt := range opts {
 		opt(cfg)
+	}
+
+	if err := cfg.validate(); err != nil {
+		return nil, err
 	}
 
 	if cfg.storage == nil {
 		cfg.storage = NewMemoryStorage()
 	}
 
-	return &Middleware{cfg: cfg}
+	return &Middleware{cfg: cfg}, nil
 }
 
 type memoryEntry struct {

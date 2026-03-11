@@ -15,7 +15,10 @@ func TestNew(t *testing.T) {
 	t.Run("applies default config when no options given", func(t *testing.T) {
 		t.Parallel()
 
-		mw := New()
+		mw, err := New()
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
 
 		if mw.cfg.keyHeader != DefaultKeyHeader {
 			t.Errorf("keyHeader = %q, want %q", mw.cfg.keyHeader, DefaultKeyHeader)
@@ -34,11 +37,14 @@ func TestNew(t *testing.T) {
 		t.Parallel()
 
 		custom := &stubStorage{}
-		mw := New(
+		mw, err := New(
 			WithKeyHeader("X-Custom-Key"),
 			WithTTL(5*time.Minute),
 			WithStorage(custom),
 		)
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
 
 		if mw.cfg.keyHeader != "X-Custom-Key" {
 			t.Errorf("keyHeader = %q, want %q", mw.cfg.keyHeader, "X-Custom-Key")
@@ -56,9 +62,40 @@ func TestNew(t *testing.T) {
 	t.Run("MemoryStorage implements Locker", func(t *testing.T) {
 		t.Parallel()
 
-		mw := New()
+		mw, err := New()
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
 		if _, ok := mw.cfg.storage.(Locker); !ok {
 			t.Error("MemoryStorage does not implement Locker")
+		}
+	})
+
+	t.Run("returns error for empty keyHeader", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := New(WithKeyHeader(""))
+		if err == nil {
+			t.Fatal("New() error = nil, want error")
+		}
+	})
+
+	t.Run("returns error for zero ttl", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := New(WithTTL(0))
+		if err == nil {
+			t.Fatal("New() error = nil, want error")
+		}
+	})
+
+	t.Run("returns error for negative ttl", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := New(WithTTL(-time.Second))
+		if err == nil {
+			t.Fatal("New() error = nil, want error")
 		}
 	})
 }

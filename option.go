@@ -1,6 +1,9 @@
 package idem
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 const (
 	// DefaultKeyHeader is the default HTTP header name for the idempotency key.
@@ -56,4 +59,17 @@ func WithOnError(fn func(error)) Option {
 	return func(c *config) {
 		c.onError = fn
 	}
+}
+
+// validate checks the config for invalid values.
+func (c *config) validate() error {
+	if c.keyHeader == "" {
+		return errors.New("idem: keyHeader must not be empty")
+	}
+
+	if c.ttl <= 0 {
+		return errors.New("idem: ttl must be positive")
+	}
+
+	return nil
 }

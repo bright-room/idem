@@ -132,3 +132,62 @@ func TestWithOnError(t *testing.T) {
 		t.Error("callback was not called")
 	}
 }
+
+func TestConfig_validate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		cfg     *config
+		wantErr bool
+	}{
+		{
+			name:    "valid default config",
+			cfg:     defaultConfig(),
+			wantErr: false,
+		},
+		{
+			name: "valid custom config",
+			cfg: &config{
+				keyHeader: "X-Request-Id",
+				ttl:       5 * time.Minute,
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty keyHeader",
+			cfg: &config{
+				keyHeader: "",
+				ttl:       DefaultTTL,
+			},
+			wantErr: true,
+		},
+		{
+			name: "zero ttl",
+			cfg: &config{
+				keyHeader: DefaultKeyHeader,
+				ttl:       0,
+			},
+			wantErr: true,
+		},
+		{
+			name: "negative ttl",
+			cfg: &config{
+				keyHeader: DefaultKeyHeader,
+				ttl:       -time.Second,
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tt.cfg.validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
