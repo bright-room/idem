@@ -14,6 +14,7 @@ type config struct {
 	keyHeader string
 	ttl       time.Duration
 	storage   Storage
+	onError   func(error)
 }
 
 // defaultConfig returns a config with sensible defaults.
@@ -47,5 +48,12 @@ func WithTTL(ttl time.Duration) Option {
 func WithStorage(s Storage) Option {
 	return func(c *config) {
 		c.storage = s
+	}
+}
+
+// WithOnError specifies a callback function that is called when a storage operation fails.
+func WithOnError(fn func(error)) Option {
+	return func(c *config) {
+		c.onError = fn
 	}
 }

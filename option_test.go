@@ -30,6 +30,10 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.storage != nil {
 		t.Errorf("storage = %v, want nil", cfg.storage)
 	}
+
+	if cfg.onError != nil {
+		t.Error("onError is non-nil, want nil")
+	}
 }
 
 func TestWithKeyHeader(t *testing.T) {
@@ -104,5 +108,25 @@ func TestWithStorage(t *testing.T) {
 
 	if cfg.storage != stub {
 		t.Errorf("storage = %v, want %v", cfg.storage, stub)
+	}
+}
+
+func TestWithOnError(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+
+	called := false
+	fn := func(_ error) { called = true }
+	WithOnError(fn)(cfg)
+
+	if cfg.onError == nil {
+		t.Fatal("onError = nil, want non-nil")
+	}
+
+	cfg.onError(nil)
+
+	if !called {
+		t.Error("callback was not called")
 	}
 }
