@@ -219,17 +219,16 @@ func TestMiddleware_Handler(t *testing.T) {
 
 // spyStorage tracks Get/Set call counts.
 type spyStorage struct {
-	stubStorage
 	getCalls int
 	setCalls int
 }
 
-func (s *spyStorage) Get(ctx context.Context, key string) (*Response, error) {
+func (s *spyStorage) Get(_ context.Context, _ string) (*Response, error) {
 	s.getCalls++
 	return nil, nil
 }
 
-func (s *spyStorage) Set(ctx context.Context, key string, res *Response, ttl time.Duration) error {
+func (s *spyStorage) Set(_ context.Context, _ string, _ *Response, _ time.Duration) error {
 	s.setCalls++
 	return nil
 }
