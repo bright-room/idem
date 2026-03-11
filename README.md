@@ -130,7 +130,10 @@ import (
 )
 
 client := goredis.NewClient(&goredis.Options{Addr: "localhost:6379"})
-store := idemredis.New(client)
+store, err := idemredis.New(client)
+if err != nil {
+	log.Fatal(err)
+}
 
 mw, err := idem.New(idem.WithStorage(store))
 ```
