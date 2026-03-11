@@ -12,7 +12,7 @@ services:
       REDIS_ADDR: redis:6379
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
 
 volumes:
   go-mod-cache:
