@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/bright-room/idem v0.2.0
-	github.com/go-chi/chi/v5 v5.2.2
+	github.com/go-chi/chi/v5 v5.2.5
 )
 
 replace github.com/bright-room/idem => ../../
