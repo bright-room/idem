@@ -145,6 +145,77 @@ func TestIntegration_Storage_WithKeyPrefix(t *testing.T) {
 	}
 }
 
+func TestIntegration_Storage_Delete(t *testing.T) {
+	client := newTestClient(t)
+	s := iredis.New(client)
+	ctx := context.Background()
+	key := "test-delete"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:"+key) })
+
+	res := &idem.Response{
+		StatusCode: http.StatusOK,
+		Header:     map[string][]string{"Content-Type": {"application/json"}},
+		Body:       []byte(`{"ok":true}`),
+	}
+
+	if err := s.Set(ctx, key, res, time.Hour); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	if err := s.Delete(ctx, key); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	got, err := s.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got != nil {
+		t.Errorf("Get() = %v, want nil", got)
+	}
+}
+
+func TestIntegration_Storage_DeleteNonExistentKey(t *testing.T) {
+	client := newTestClient(t)
+	s := iredis.New(client)
+
+	if err := s.Delete(context.Background(), "non-existent-delete-key"); err != nil {
+		t.Errorf("Delete() error = %v, want nil", err)
+	}
+}
+
+func TestIntegration_Storage_DeleteWithKeyPrefix(t *testing.T) {
+	client := newTestClient(t)
+	prefix := "custom:"
+	s := iredis.New(client, iredis.WithKeyPrefix(prefix))
+	ctx := context.Background()
+	key := "test-delete-prefix"
+
+	t.Cleanup(func() { client.Del(ctx, prefix+key) })
+
+	res := &idem.Response{
+		StatusCode: http.StatusOK,
+		Body:       []byte("data"),
+	}
+
+	if err := s.Set(ctx, key, res, time.Hour); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	if err := s.Delete(ctx, key); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	got, err := s.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got != nil {
+		t.Errorf("Get() = %v, want nil", got)
+	}
+}
+
 func TestIntegration_Storage_GetReturnsErrorOnConnectionFailure(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")

@@ -93,6 +93,12 @@ func (s *Storage) Set(ctx context.Context, key string, res *idem.Response, ttl t
 	return s.client.Set(ctx, s.keyPrefix+key, data, ttl).Err()
 }
 
+// Delete removes the cached response for the given key.
+// If the key does not exist, it returns nil.
+func (s *Storage) Delete(ctx context.Context, key string) error {
+	return s.client.Del(ctx, s.keyPrefix+key).Err()
+}
+
 // Lock acquires a distributed lock for the given key using Redis SET NX.
 // It retries until the lock is acquired or the context is cancelled.
 // The returned unlock function releases the lock atomically using a Lua script,

@@ -385,10 +385,11 @@ func TestMiddleware_Handler(t *testing.T) {
 	})
 }
 
-// spyStorage tracks Get/Set call counts.
+// spyStorage tracks Get/Set/Delete call counts.
 type spyStorage struct {
-	getCalls int
-	setCalls int
+	getCalls    int
+	setCalls    int
+	deleteCalls int
 }
 
 func (s *spyStorage) Get(_ context.Context, _ string) (*Response, error) {
@@ -401,10 +402,16 @@ func (s *spyStorage) Set(_ context.Context, _ string, _ *Response, _ time.Durati
 	return nil
 }
 
-// errorStorage returns errors from Get/Set.
+func (s *spyStorage) Delete(_ context.Context, _ string) error {
+	s.deleteCalls++
+	return nil
+}
+
+// errorStorage returns errors from Get/Set/Delete.
 type errorStorage struct {
 	getErr error
 	setErr error
+	delErr error
 }
 
 func (s *errorStorage) Get(_ context.Context, _ string) (*Response, error) {
@@ -413,6 +420,10 @@ func (s *errorStorage) Get(_ context.Context, _ string) (*Response, error) {
 
 func (s *errorStorage) Set(_ context.Context, _ string, _ *Response, _ time.Duration) error {
 	return s.setErr
+}
+
+func (s *errorStorage) Delete(_ context.Context, _ string) error {
+	return s.delErr
 }
 
 // spyLockerStorage tracks Lock/Unlock call counts.

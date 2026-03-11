@@ -75,6 +75,17 @@ func (s *MemoryStorage) Set(_ context.Context, key string, res *Response, ttl ti
 	return nil
 }
 
+// Delete removes the cached response for the given key.
+// If the key does not exist, it returns nil.
+func (s *MemoryStorage) Delete(_ context.Context, key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.entries, key)
+
+	return nil
+}
+
 // Lock acquires a per-key mutex lock.
 // The TTL parameter is ignored for in-memory locking since the mutex
 // is released explicitly via the returned unlock function.
