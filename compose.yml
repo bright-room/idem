@@ -6,6 +6,13 @@ services:
       - go-mod-cache:/go/pkg/mod
       - go-build-cache:/root/.cache/go-build
     working_dir: /workspace
+    depends_on:
+      - redis
+    environment:
+      REDIS_ADDR: redis:6379
+
+  redis:
+    image: redis:7-alpine
 
 volumes:
   go-mod-cache:
