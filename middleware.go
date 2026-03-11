@@ -2,6 +2,7 @@ package idem
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 )
 
@@ -95,6 +96,37 @@ type responseRecorderFlusherHijacker struct {
 	http.Hijacker
 }
 
+// responseRecorderReaderFrom delegates io.ReaderFrom to the underlying ResponseWriter.
+type responseRecorderReaderFrom struct {
+	*responseRecorder
+	io.ReaderFrom
+}
+
+// responseRecorderFlusherReaderFrom delegates both http.Flusher and io.ReaderFrom
+// to the underlying ResponseWriter.
+type responseRecorderFlusherReaderFrom struct {
+	*responseRecorder
+	http.Flusher
+	io.ReaderFrom
+}
+
+// responseRecorderHijackerReaderFrom delegates both http.Hijacker and io.ReaderFrom
+// to the underlying ResponseWriter.
+type responseRecorderHijackerReaderFrom struct {
+	*responseRecorder
+	http.Hijacker
+	io.ReaderFrom
+}
+
+// responseRecorderFlusherHijackerReaderFrom delegates http.Flusher, http.Hijacker,
+// and io.ReaderFrom to the underlying ResponseWriter.
+type responseRecorderFlusherHijackerReaderFrom struct {
+	*responseRecorder
+	http.Flusher
+	http.Hijacker
+	io.ReaderFrom
+}
+
 func newResponseRecorder(w http.ResponseWriter) http.ResponseWriter {
 	rec := &responseRecorder{
 		ResponseWriter: w,
@@ -103,14 +135,23 @@ func newResponseRecorder(w http.ResponseWriter) http.ResponseWriter {
 
 	flusher, canFlush := w.(http.Flusher)
 	hijacker, canHijack := w.(http.Hijacker)
+	readerFrom, canReadFrom := w.(io.ReaderFrom)
 
 	switch {
+	case canFlush && canHijack && canReadFrom:
+		return &responseRecorderFlusherHijackerReaderFrom{rec, flusher, hijacker, readerFrom}
 	case canFlush && canHijack:
 		return &responseRecorderFlusherHijacker{rec, flusher, hijacker}
+	case canFlush && canReadFrom:
+		return &responseRecorderFlusherReaderFrom{rec, flusher, readerFrom}
+	case canHijack && canReadFrom:
+		return &responseRecorderHijackerReaderFrom{rec, hijacker, readerFrom}
 	case canFlush:
 		return &responseRecorderFlusher{rec, flusher}
 	case canHijack:
 		return &responseRecorderHijacker{rec, hijacker}
+	case canReadFrom:
+		return &responseRecorderReaderFrom{rec, readerFrom}
 	default:
 		return rec
 	}

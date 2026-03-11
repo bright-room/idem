@@ -10,7 +10,7 @@ Idempotency key middleware for Go HTTP applications.
 - **Framework-agnostic** — Built on `net/http`, works with Gin, Echo, Chi, and any compatible router
 - **Pluggable storage** — Interface-based design with built-in memory and Redis implementations
 - **Zero config** — Works out of the box with sensible defaults
-- **Streaming & WebSocket ready** — Preserves `http.Flusher` and `http.Hijacker` interfaces through the middleware
+- **Streaming & WebSocket ready** — Preserves `http.Flusher`, `http.Hijacker`, and `io.ReaderFrom` interfaces through the middleware
 - **Lightweight** — Minimal API surface, just wrap your handler
 
 ## Installation

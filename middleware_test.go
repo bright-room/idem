@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -444,6 +446,73 @@ func TestNewResponseRecorder(t *testing.T) {
 		}
 	})
 
+	t.Run("delegates io.ReaderFrom to underlying ResponseWriter", func(t *testing.T) {
+		t.Parallel()
+
+		rfw := &readerFromWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(rfw)
+
+		rf, ok := rec.(io.ReaderFrom)
+		if !ok {
+			t.Fatal("recorder does not implement io.ReaderFrom")
+		}
+
+		_, _ = rf.ReadFrom(strings.NewReader("hello"))
+
+		if !rfw.readFrom {
+			t.Error("ReadFrom() was not delegated to the underlying writer")
+		}
+	})
+
+	t.Run("delegates both http.Flusher and io.ReaderFrom", func(t *testing.T) {
+		t.Parallel()
+
+		frw := &flusherReaderFromWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(frw)
+
+		if _, ok := rec.(http.Flusher); !ok {
+			t.Error("recorder does not implement http.Flusher")
+		}
+
+		if _, ok := rec.(io.ReaderFrom); !ok {
+			t.Error("recorder does not implement io.ReaderFrom")
+		}
+	})
+
+	t.Run("delegates both http.Hijacker and io.ReaderFrom", func(t *testing.T) {
+		t.Parallel()
+
+		hrw := &hijackerReaderFromWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(hrw)
+
+		if _, ok := rec.(http.Hijacker); !ok {
+			t.Error("recorder does not implement http.Hijacker")
+		}
+
+		if _, ok := rec.(io.ReaderFrom); !ok {
+			t.Error("recorder does not implement io.ReaderFrom")
+		}
+	})
+
+	t.Run("delegates http.Flusher, http.Hijacker, and io.ReaderFrom", func(t *testing.T) {
+		t.Parallel()
+
+		fhrw := &flusherHijackerReaderFromWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(fhrw)
+
+		if _, ok := rec.(http.Flusher); !ok {
+			t.Error("recorder does not implement http.Flusher")
+		}
+
+		if _, ok := rec.(http.Hijacker); !ok {
+			t.Error("recorder does not implement http.Hijacker")
+		}
+
+		if _, ok := rec.(io.ReaderFrom); !ok {
+			t.Error("recorder does not implement io.ReaderFrom")
+		}
+	})
+
 	t.Run("does not implement http.Flusher when underlying writer does not", func(t *testing.T) {
 		t.Parallel()
 
@@ -456,6 +525,31 @@ func TestNewResponseRecorder(t *testing.T) {
 
 		if _, ok := rec.(http.Hijacker); ok {
 			t.Error("recorder implements http.Hijacker, want not implemented")
+		}
+
+		if _, ok := rec.(io.ReaderFrom); ok {
+			t.Error("recorder implements io.ReaderFrom, want not implemented")
+		}
+	})
+
+	t.Run("preserves response recording with ReaderFrom delegation", func(t *testing.T) {
+		t.Parallel()
+
+		rfw := &readerFromWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(rfw)
+
+		rec.WriteHeader(http.StatusCreated)
+		_, _ = rec.Write([]byte("hello"))
+
+		rr := rec.(recorder)
+		res := rr.toResponse()
+
+		if res.StatusCode != http.StatusCreated {
+			t.Errorf("status = %d, want %d", res.StatusCode, http.StatusCreated)
+		}
+
+		if string(res.Body) != "hello" {
+			t.Errorf("body = %q, want %q", string(res.Body), "hello")
 		}
 	})
 
@@ -477,6 +571,28 @@ func TestNewResponseRecorder(t *testing.T) {
 
 		if string(res.Body) != "hello" {
 			t.Errorf("body = %q, want %q", string(res.Body), "hello")
+		}
+	})
+
+	t.Run("preserves io.ReaderFrom interface through middleware handler", func(t *testing.T) {
+		t.Parallel()
+
+		var handlerReaderFromOK bool
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, handlerReaderFromOK = w.(io.ReaderFrom)
+			w.WriteHeader(http.StatusOK)
+		})
+
+		mw := newTestMiddleware(t)
+		wrapped := mw.Handler()(handler)
+
+		rfw := &readerFromWriter{ResponseWriter: httptest.NewRecorder()}
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "readerfrom-key")
+		wrapped.ServeHTTP(rfw, req)
+
+		if !handlerReaderFromOK {
+			t.Error("io.ReaderFrom was not available inside handler")
 		}
 	})
 
@@ -543,6 +659,73 @@ func (w *flusherHijackerWriter) Flush() {
 func (w *flusherHijackerWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	w.hijacked = true
 	return nil, nil, nil
+}
+
+// readerFromWriter implements http.ResponseWriter and io.ReaderFrom.
+type readerFromWriter struct {
+	http.ResponseWriter
+	readFrom bool
+}
+
+func (w *readerFromWriter) ReadFrom(r io.Reader) (int64, error) {
+	w.readFrom = true
+	return io.Copy(w.ResponseWriter, r)
+}
+
+// flusherReaderFromWriter implements http.ResponseWriter, http.Flusher, and io.ReaderFrom.
+type flusherReaderFromWriter struct {
+	http.ResponseWriter
+	flushed  bool
+	readFrom bool
+}
+
+func (w *flusherReaderFromWriter) Flush() {
+	w.flushed = true
+}
+
+func (w *flusherReaderFromWriter) ReadFrom(r io.Reader) (int64, error) {
+	w.readFrom = true
+	return io.Copy(w.ResponseWriter, r)
+}
+
+// hijackerReaderFromWriter implements http.ResponseWriter, http.Hijacker, and io.ReaderFrom.
+type hijackerReaderFromWriter struct {
+	http.ResponseWriter
+	hijacked bool
+	readFrom bool
+}
+
+func (w *hijackerReaderFromWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	w.hijacked = true
+	return nil, nil, nil
+}
+
+func (w *hijackerReaderFromWriter) ReadFrom(r io.Reader) (int64, error) {
+	w.readFrom = true
+	return io.Copy(w.ResponseWriter, r)
+}
+
+// flusherHijackerReaderFromWriter implements http.ResponseWriter, http.Flusher,
+// http.Hijacker, and io.ReaderFrom.
+type flusherHijackerReaderFromWriter struct {
+	http.ResponseWriter
+	flushed  bool
+	hijacked bool
+	readFrom bool
+}
+
+func (w *flusherHijackerReaderFromWriter) Flush() {
+	w.flushed = true
+}
+
+func (w *flusherHijackerReaderFromWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	w.hijacked = true
+	return nil, nil, nil
+}
+
+func (w *flusherHijackerReaderFromWriter) ReadFrom(r io.Reader) (int64, error) {
+	w.readFrom = true
+	return io.Copy(w.ResponseWriter, r)
 }
 
 // newTestMiddleware creates a Middleware with default options, failing the test on error.
