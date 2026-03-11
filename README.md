@@ -171,12 +171,30 @@ curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
 
 See [`_examples/echo/main.go`](./_examples/echo/main.go) for the full source including global and route-group middleware patterns.
 
+### Chi
+
+```bash
+cd _examples/chi && go run main.go
+```
+
+```bash
+# First request — handler executes and response is cached
+curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
+# => {"message":"order created","order_id":"order-1"}
+
+# Second request — cached response returned, handler is NOT re-executed
+curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
+# => {"message":"order created","order_id":"order-1"}
+```
+
+See [`_examples/chi/main.go`](./_examples/chi/main.go) for the full source including inline (`r.With()`) and route-group middleware patterns.
+
 ## Roadmap
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | v0.1 | Planned | Core middleware + in-memory storage |
 | v0.2 | **Done** | Redis storage |
-| v0.3 | **In Progress** | Framework examples (Gin / Echo / Chi) |
+| v0.3 | **Done** | Framework examples (Gin / Echo / Chi) |
 | v0.4 | Planned | Concurrent request handling (lock mechanism) |
 | v1.0 | Planned | Documentation + stable release |
