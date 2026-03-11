@@ -1,4 +1,4 @@
-FROM golangci/golangci-lint:v2.10.1 AS golangci-lint
+FROM golangci/golangci-lint:v2.11.3 AS golangci-lint
 
 FROM golang:1.26.1
 
