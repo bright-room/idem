@@ -354,7 +354,7 @@ func TestMiddleware_Handler(t *testing.T) {
 			_, _ = w.Write([]byte(`{"id":1}`))
 		})
 
-		store := newDefaultStorage()
+		store := NewMemoryStorage()
 		mw := New(WithStorage(store))
 		wrapped := mw.Handler()(handler)
 

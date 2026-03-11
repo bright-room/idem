@@ -19,7 +19,7 @@ type config struct {
 
 // defaultConfig returns a config with sensible defaults.
 // storage is nil by default; the middleware constructor initializes it
-// to memory.New() to avoid an import cycle between idem and idem/memory.
+// to NewMemoryStorage().
 func defaultConfig() *config {
 	return &config{
 		keyHeader: DefaultKeyHeader,

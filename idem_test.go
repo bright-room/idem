@@ -2,6 +2,7 @@ package idem
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -24,8 +25,8 @@ func TestNew(t *testing.T) {
 			t.Errorf("ttl = %v, want %v", mw.cfg.ttl, DefaultTTL)
 		}
 
-		if _, ok := mw.cfg.storage.(*defaultStorage); !ok {
-			t.Errorf("storage type = %T, want *defaultStorage", mw.cfg.storage)
+		if _, ok := mw.cfg.storage.(*MemoryStorage); !ok {
+			t.Errorf("storage type = %T, want *MemoryStorage", mw.cfg.storage)
 		}
 	})
 
@@ -52,23 +53,133 @@ func TestNew(t *testing.T) {
 		}
 	})
 
-	t.Run("defaultStorage implements Locker", func(t *testing.T) {
+	t.Run("MemoryStorage implements Locker", func(t *testing.T) {
 		t.Parallel()
 
 		mw := New()
 		if _, ok := mw.cfg.storage.(Locker); !ok {
-			t.Error("defaultStorage does not implement Locker")
+			t.Error("MemoryStorage does not implement Locker")
 		}
 	})
 }
 
-func TestDefaultStorage_Lock(t *testing.T) {
+func TestMemoryStorage_Get(t *testing.T) {
+	t.Parallel()
+
+	res := &Response{
+		StatusCode: http.StatusOK,
+		Header:     map[string][]string{"Content-Type": {"application/json"}},
+		Body:       []byte(`{"ok":true}`),
+	}
+
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T, s *MemoryStorage)
+		key     string
+		wantRes *Response
+	}{
+		{
+			name: "returns cached response for existing key",
+			setup: func(t *testing.T, s *MemoryStorage) {
+				t.Helper()
+				if err := s.Set(context.Background(), "key-1", res, time.Hour); err != nil {
+					t.Fatalf("Set() error = %v", err)
+				}
+			},
+			key:     "key-1",
+			wantRes: res,
+		},
+		{
+			name:    "returns nil for non-existent key",
+			setup:   func(t *testing.T, _ *MemoryStorage) { t.Helper() },
+			key:     "unknown",
+			wantRes: nil,
+		},
+		{
+			name: "returns nil after TTL has expired",
+			setup: func(t *testing.T, s *MemoryStorage) {
+				t.Helper()
+				if err := s.Set(context.Background(), "expired", res, time.Nanosecond); err != nil {
+					t.Fatalf("Set() error = %v", err)
+				}
+				time.Sleep(time.Millisecond)
+			},
+			key:     "expired",
+			wantRes: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := NewMemoryStorage()
+			tt.setup(t, s)
+
+			got, err := s.Get(context.Background(), tt.key)
+			if err != nil {
+				t.Fatalf("Get() error = %v", err)
+			}
+
+			if tt.wantRes == nil {
+				if got != nil {
+					t.Errorf("Get() = %v, want nil", got)
+				}
+				return
+			}
+
+			if got == nil {
+				t.Fatal("Get() = nil, want non-nil")
+			}
+			if got.StatusCode != tt.wantRes.StatusCode {
+				t.Errorf("StatusCode = %d, want %d", got.StatusCode, tt.wantRes.StatusCode)
+			}
+			if http.Header(got.Header).Get("Content-Type") != http.Header(tt.wantRes.Header).Get("Content-Type") {
+				t.Errorf("Header Content-Type = %q, want %q",
+					http.Header(got.Header).Get("Content-Type"), http.Header(tt.wantRes.Header).Get("Content-Type"))
+			}
+			if string(got.Body) != string(tt.wantRes.Body) {
+				t.Errorf("Body = %q, want %q", got.Body, tt.wantRes.Body)
+			}
+		})
+	}
+}
+
+func TestMemoryStorage_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
+	s := NewMemoryStorage()
+	ctx := context.Background()
+
+	var wg sync.WaitGroup
+	const goroutines = 100
+
+	for i := range goroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			key := "key"
+			res := &Response{
+				StatusCode: http.StatusOK + i,
+				Body:       []byte("body"),
+			}
+
+			_ = s.Set(ctx, key, res, time.Hour)
+			_, _ = s.Get(ctx, key)
+		}()
+	}
+
+	wg.Wait()
+}
+
+func TestMemoryStorage_Lock(t *testing.T) {
 	t.Parallel()
 
 	t.Run("acquires and releases lock", func(t *testing.T) {
 		t.Parallel()
 
-		s := newDefaultStorage()
+		s := NewMemoryStorage()
 		ctx := context.Background()
 
 		unlock, err := s.Lock(ctx, "key-1", time.Hour)
@@ -82,7 +193,7 @@ func TestDefaultStorage_Lock(t *testing.T) {
 	t.Run("provides mutual exclusion for same key", func(t *testing.T) {
 		t.Parallel()
 
-		s := newDefaultStorage()
+		s := NewMemoryStorage()
 		ctx := context.Background()
 
 		var concurrent atomic.Int32
@@ -123,7 +234,7 @@ func TestDefaultStorage_Lock(t *testing.T) {
 	t.Run("returns error when context is cancelled", func(t *testing.T) {
 		t.Parallel()
 
-		s := newDefaultStorage()
+		s := NewMemoryStorage()
 		ctx := context.Background()
 
 		// Hold the lock
@@ -144,6 +255,35 @@ func TestDefaultStorage_Lock(t *testing.T) {
 
 		if err != context.Canceled {
 			t.Errorf("Lock() error = %v, want %v", err, context.Canceled)
+		}
+	})
+
+	t.Run("allows independent keys to lock concurrently", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewMemoryStorage()
+		ctx := context.Background()
+
+		unlock1, err := s.Lock(ctx, "key-a", time.Hour)
+		if err != nil {
+			t.Fatalf("Lock(key-a) error = %v", err)
+		}
+
+		unlock2, err := s.Lock(ctx, "key-b", time.Hour)
+		if err != nil {
+			t.Fatalf("Lock(key-b) error = %v", err)
+		}
+
+		unlock1()
+		unlock2()
+	})
+
+	t.Run("implements Locker interface", func(t *testing.T) {
+		t.Parallel()
+
+		var s interface{} = NewMemoryStorage()
+		if _, ok := s.(Locker); !ok {
+			t.Error("MemoryStorage does not implement Locker")
 		}
 	})
 }
