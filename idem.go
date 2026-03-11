@@ -14,30 +14,35 @@ func New(opts ...Option) *Middleware {
 	}
 
 	if cfg.storage == nil {
-		cfg.storage = newDefaultStorage()
+		cfg.storage = NewMemoryStorage()
 	}
 
 	return &Middleware{cfg: cfg}
 }
 
-type defaultEntry struct {
+type memoryEntry struct {
 	res       *Response
 	expiresAt time.Time
 }
 
-type defaultStorage struct {
+// MemoryStorage is an in-memory implementation of Storage.
+// It also implements Locker for per-key mutual exclusion.
+type MemoryStorage struct {
 	mu      sync.RWMutex
-	entries map[string]*defaultEntry
+	entries map[string]*memoryEntry
 	locks   sync.Map
 }
 
-func newDefaultStorage() *defaultStorage {
-	return &defaultStorage{
-		entries: make(map[string]*defaultEntry),
+// NewMemoryStorage creates a new in-memory Storage.
+func NewMemoryStorage() *MemoryStorage {
+	return &MemoryStorage{
+		entries: make(map[string]*memoryEntry),
 	}
 }
 
-func (s *defaultStorage) Get(_ context.Context, key string) (*Response, error) {
+// Get returns the cached response for the given key.
+// If the key does not exist or has expired, it returns nil, nil.
+func (s *MemoryStorage) Get(_ context.Context, key string) (*Response, error) {
 	s.mu.RLock()
 	e, ok := s.entries[key]
 	s.mu.RUnlock()
@@ -57,11 +62,12 @@ func (s *defaultStorage) Get(_ context.Context, key string) (*Response, error) {
 	return e.res, nil
 }
 
-func (s *defaultStorage) Set(_ context.Context, key string, res *Response, ttl time.Duration) error {
+// Set stores the response for the given key with the specified TTL.
+func (s *MemoryStorage) Set(_ context.Context, key string, res *Response, ttl time.Duration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.entries[key] = &defaultEntry{
+	s.entries[key] = &memoryEntry{
 		res:       res,
 		expiresAt: time.Now().Add(ttl),
 	}
@@ -72,7 +78,7 @@ func (s *defaultStorage) Set(_ context.Context, key string, res *Response, ttl t
 // Lock acquires a per-key mutex lock.
 // The TTL parameter is ignored for in-memory locking since the mutex
 // is released explicitly via the returned unlock function.
-func (s *defaultStorage) Lock(ctx context.Context, key string, _ time.Duration) (func(), error) {
+func (s *MemoryStorage) Lock(ctx context.Context, key string, _ time.Duration) (func(), error) {
 	v, _ := s.locks.LoadOrStore(key, &sync.Mutex{})
 	mu := v.(*sync.Mutex)
 
