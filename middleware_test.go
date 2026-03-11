@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
@@ -264,6 +265,124 @@ func TestMiddleware_Handler(t *testing.T) {
 			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
 		}
 	})
+
+	t.Run("acquires lock when storage implements Locker", func(t *testing.T) {
+		t.Parallel()
+
+		store := &spyLockerStorage{}
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		mw := New(WithStorage(store))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "lock-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req)
+
+		if store.lockCalls != 1 {
+			t.Errorf("Lock calls = %d, want 1", store.lockCalls)
+		}
+
+		if store.unlockCalls != 1 {
+			t.Errorf("Unlock calls = %d, want 1", store.unlockCalls)
+		}
+	})
+
+	t.Run("returns 409 Conflict when lock acquisition fails", func(t *testing.T) {
+		t.Parallel()
+
+		called := false
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusOK)
+		})
+
+		lockErr := errors.New("lock failed")
+		store := &errorLockerStorage{lockErr: lockErr}
+		mw := New(WithStorage(store))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "conflict-key")
+		rec := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec, req)
+
+		if called {
+			t.Error("handler was called, want not called")
+		}
+
+		if rec.Code != http.StatusConflict {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusConflict)
+		}
+	})
+
+	t.Run("calls onError callback when lock acquisition fails", func(t *testing.T) {
+		t.Parallel()
+
+		lockErr := errors.New("lock failed")
+		var gotErr error
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+
+		store := &errorLockerStorage{lockErr: lockErr}
+		mw := New(WithStorage(store), WithOnError(func(err error) { gotErr = err }))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "err-lock-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req)
+
+		if !errors.Is(gotErr, lockErr) {
+			t.Errorf("onError received %v, want %v", gotErr, lockErr)
+		}
+	})
+
+	t.Run("concurrent requests with same key execute handler only once", func(t *testing.T) {
+		t.Parallel()
+
+		var mu sync.Mutex
+		callCount := 0
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			mu.Lock()
+			callCount++
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":1}`))
+		})
+
+		store := newDefaultStorage()
+		mw := New(WithStorage(store))
+		wrapped := mw.Handler()(handler)
+
+		var wg sync.WaitGroup
+		const goroutines = 10
+
+		for range goroutines {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				req := httptest.NewRequest(http.MethodPost, "/", nil)
+				req.Header.Set("Idempotency-Key", "concurrent-key")
+				rec := httptest.NewRecorder()
+				wrapped.ServeHTTP(rec, req)
+			}()
+		}
+
+		wg.Wait()
+
+		mu.Lock()
+		count := callCount
+		mu.Unlock()
+
+		if count != 1 {
+			t.Errorf("handler call count = %d, want 1", count)
+		}
+	})
 }
 
 // spyStorage tracks Get/Set call counts.
@@ -294,4 +413,26 @@ func (s *errorStorage) Get(_ context.Context, _ string) (*Response, error) {
 
 func (s *errorStorage) Set(_ context.Context, _ string, _ *Response, _ time.Duration) error {
 	return s.setErr
+}
+
+// spyLockerStorage tracks Lock/Unlock call counts.
+type spyLockerStorage struct {
+	spyStorage
+	lockCalls   int
+	unlockCalls int
+}
+
+func (s *spyLockerStorage) Lock(_ context.Context, _ string, _ time.Duration) (func(), error) {
+	s.lockCalls++
+	return func() { s.unlockCalls++ }, nil
+}
+
+// errorLockerStorage returns errors from Lock.
+type errorLockerStorage struct {
+	errorStorage
+	lockErr error
+}
+
+func (s *errorLockerStorage) Lock(_ context.Context, _ string, _ time.Duration) (func(), error) {
+	return nil, s.lockErr
 }

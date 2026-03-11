@@ -2,6 +2,8 @@ package redis
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"time"
 
@@ -9,12 +11,25 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-const defaultKeyPrefix = "idem:"
+const (
+	defaultKeyPrefix  = "idem:"
+	defaultLockPrefix = "idem:lock:"
+	lockRetryInterval = 50 * time.Millisecond
+)
 
-// Storage is a Redis-backed implementation of idem.Storage.
+// luaUnlockScript atomically deletes a lock key only if its value matches.
+var luaUnlockScript = goredis.NewScript(`
+if redis.call("get", KEYS[1]) == ARGV[1] then
+	return redis.call("del", KEYS[1])
+end
+return 0
+`)
+
+// Storage is a Redis-backed implementation of idem.Storage and idem.Locker.
 type Storage struct {
-	client    goredis.Cmdable
-	keyPrefix string
+	client     goredis.Cmdable
+	keyPrefix  string
+	lockPrefix string
 }
 
 // Option configures a Redis Storage.
@@ -28,11 +43,20 @@ func WithKeyPrefix(prefix string) Option {
 	}
 }
 
+// WithLockPrefix sets the prefix for Redis lock keys.
+// Default is "idem:lock:".
+func WithLockPrefix(prefix string) Option {
+	return func(s *Storage) {
+		s.lockPrefix = prefix
+	}
+}
+
 // New creates a new Redis Storage.
 func New(client goredis.Cmdable, opts ...Option) *Storage {
 	s := &Storage{
-		client:    client,
-		keyPrefix: defaultKeyPrefix,
+		client:     client,
+		keyPrefix:  defaultKeyPrefix,
+		lockPrefix: defaultLockPrefix,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -67,4 +91,37 @@ func (s *Storage) Set(ctx context.Context, key string, res *idem.Response, ttl t
 	}
 
 	return s.client.Set(ctx, s.keyPrefix+key, data, ttl).Err()
+}
+
+// Lock acquires a distributed lock for the given key using Redis SET NX.
+// It retries until the lock is acquired or the context is cancelled.
+// The returned unlock function releases the lock atomically using a Lua script,
+// ensuring only the owner can release the lock.
+func (s *Storage) Lock(ctx context.Context, key string, ttl time.Duration) (func(), error) {
+	lockKey := s.lockPrefix + key
+	lockValue := generateLockValue()
+
+	for {
+		ok, err := s.client.SetNX(ctx, lockKey, lockValue, ttl).Result()
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			return func() {
+				luaUnlockScript.Run(context.Background(), s.client, []string{lockKey}, lockValue)
+			}, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(lockRetryInterval):
+		}
+	}
+}
+
+func generateLockValue() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }

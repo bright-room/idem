@@ -20,6 +20,18 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 				return
 			}
 
+			if locker, ok := m.cfg.storage.(Locker); ok {
+				unlock, err := locker.Lock(r.Context(), key, m.cfg.ttl)
+				if err != nil {
+					if m.cfg.onError != nil {
+						m.cfg.onError(err)
+					}
+					http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
+					return
+				}
+				defer unlock()
+			}
+
 			cached, err := m.cfg.storage.Get(r.Context(), key)
 			if err != nil {
 				if m.cfg.onError != nil {

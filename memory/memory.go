@@ -14,9 +14,11 @@ type entry struct {
 }
 
 // Storage is an in-memory implementation of idem.Storage.
+// It also implements idem.Locker for per-key mutual exclusion.
 type Storage struct {
 	mu      sync.RWMutex
 	entries map[string]*entry
+	locks   sync.Map
 }
 
 // New creates a new in-memory Storage.
@@ -59,4 +61,29 @@ func (s *Storage) Set(_ context.Context, key string, res *idem.Response, ttl tim
 	}
 
 	return nil
+}
+
+// Lock acquires a per-key mutex lock.
+// The TTL parameter is ignored for in-memory locking since the mutex
+// is released explicitly via the returned unlock function.
+func (s *Storage) Lock(ctx context.Context, key string, _ time.Duration) (func(), error) {
+	v, _ := s.locks.LoadOrStore(key, &sync.Mutex{})
+	mu := v.(*sync.Mutex)
+
+	locked := make(chan struct{})
+	go func() {
+		mu.Lock()
+		close(locked)
+	}()
+
+	select {
+	case <-locked:
+		return func() { mu.Unlock() }, nil
+	case <-ctx.Done():
+		go func() {
+			<-locked
+			mu.Unlock()
+		}()
+		return nil, ctx.Err()
+	}
 }
