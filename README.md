@@ -131,12 +131,34 @@ type Storage interface {
 }
 ```
 
+## Examples
+
+The [`_examples`](./_examples) directory contains runnable examples for popular frameworks.
+
+### Gin
+
+```bash
+cd _examples/gin && go run main.go
+```
+
+```bash
+# First request — handler executes and response is cached
+curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
+# => {"message":"order created","order_id":"order-1"}
+
+# Second request — cached response returned, handler is NOT re-executed
+curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
+# => {"message":"order created","order_id":"order-1"}
+```
+
+See [`_examples/gin/main.go`](./_examples/gin/main.go) for the full source including per-endpoint and route-group middleware patterns.
+
 ## Roadmap
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | v0.1 | Planned | Core middleware + in-memory storage |
 | v0.2 | **Done** | Redis storage |
-| v0.3 | Planned | Framework examples (Gin / Echo / Chi) |
+| v0.3 | **In Progress** | Framework examples (Gin / Echo / Chi) |
 | v0.4 | Planned | Concurrent request handling (lock mechanism) |
 | v1.0 | Planned | Documentation + stable release |
