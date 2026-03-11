@@ -465,8 +465,8 @@ func TestNewResponseRecorder(t *testing.T) {
 		fw := &flusherWriter{ResponseWriter: httptest.NewRecorder()}
 		rec := newResponseRecorder(fw)
 
-		rec.(http.ResponseWriter).WriteHeader(http.StatusCreated)
-		_, _ = rec.(http.ResponseWriter).Write([]byte("hello"))
+		rec.WriteHeader(http.StatusCreated)
+		_, _ = rec.Write([]byte("hello"))
 
 		rr := rec.(recorder)
 		res := rr.toResponse()
