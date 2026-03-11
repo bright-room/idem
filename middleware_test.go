@@ -1,8 +1,10 @@
 package idem
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -383,6 +385,164 @@ func TestMiddleware_Handler(t *testing.T) {
 			t.Errorf("handler call count = %d, want 1", count)
 		}
 	})
+}
+
+func TestNewResponseRecorder(t *testing.T) {
+	t.Parallel()
+
+	t.Run("delegates http.Flusher to underlying ResponseWriter", func(t *testing.T) {
+		t.Parallel()
+
+		fw := &flusherWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(fw)
+
+		flusher, ok := rec.(http.Flusher)
+		if !ok {
+			t.Fatal("recorder does not implement http.Flusher")
+		}
+
+		flusher.Flush()
+
+		if !fw.flushed {
+			t.Error("Flush() was not delegated to the underlying writer")
+		}
+	})
+
+	t.Run("delegates http.Hijacker to underlying ResponseWriter", func(t *testing.T) {
+		t.Parallel()
+
+		hw := &hijackerWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(hw)
+
+		hijacker, ok := rec.(http.Hijacker)
+		if !ok {
+			t.Fatal("recorder does not implement http.Hijacker")
+		}
+
+		_, _, err := hijacker.Hijack()
+		if err != nil {
+			t.Fatalf("Hijack() error = %v", err)
+		}
+
+		if !hw.hijacked {
+			t.Error("Hijack() was not delegated to the underlying writer")
+		}
+	})
+
+	t.Run("delegates both http.Flusher and http.Hijacker", func(t *testing.T) {
+		t.Parallel()
+
+		fhw := &flusherHijackerWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(fhw)
+
+		if _, ok := rec.(http.Flusher); !ok {
+			t.Error("recorder does not implement http.Flusher")
+		}
+
+		if _, ok := rec.(http.Hijacker); !ok {
+			t.Error("recorder does not implement http.Hijacker")
+		}
+	})
+
+	t.Run("does not implement http.Flusher when underlying writer does not", func(t *testing.T) {
+		t.Parallel()
+
+		pw := &plainWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(pw)
+
+		if _, ok := rec.(http.Flusher); ok {
+			t.Error("recorder implements http.Flusher, want not implemented")
+		}
+
+		if _, ok := rec.(http.Hijacker); ok {
+			t.Error("recorder implements http.Hijacker, want not implemented")
+		}
+	})
+
+	t.Run("preserves response recording with Flusher delegation", func(t *testing.T) {
+		t.Parallel()
+
+		fw := &flusherWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(fw)
+
+		rec.WriteHeader(http.StatusCreated)
+		_, _ = rec.Write([]byte("hello"))
+
+		rr := rec.(recorder)
+		res := rr.toResponse()
+
+		if res.StatusCode != http.StatusCreated {
+			t.Errorf("status = %d, want %d", res.StatusCode, http.StatusCreated)
+		}
+
+		if string(res.Body) != "hello" {
+			t.Errorf("body = %q, want %q", string(res.Body), "hello")
+		}
+	})
+
+	t.Run("preserves interface through middleware handler", func(t *testing.T) {
+		t.Parallel()
+
+		var handlerFlusherOK bool
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, handlerFlusherOK = w.(http.Flusher)
+			w.WriteHeader(http.StatusOK)
+		})
+
+		mw := newTestMiddleware(t)
+		wrapped := mw.Handler()(handler)
+
+		fw := &flusherWriter{ResponseWriter: httptest.NewRecorder()}
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "flusher-key")
+		wrapped.ServeHTTP(fw, req)
+
+		if !handlerFlusherOK {
+			t.Error("http.Flusher was not available inside handler")
+		}
+	})
+}
+
+// plainWriter implements only http.ResponseWriter.
+type plainWriter struct {
+	http.ResponseWriter
+}
+
+// flusherWriter implements http.ResponseWriter and http.Flusher.
+type flusherWriter struct {
+	http.ResponseWriter
+	flushed bool
+}
+
+func (w *flusherWriter) Flush() {
+	w.flushed = true
+}
+
+// hijackerWriter implements http.ResponseWriter and http.Hijacker.
+type hijackerWriter struct {
+	http.ResponseWriter
+	hijacked bool
+}
+
+func (w *hijackerWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	w.hijacked = true
+	return nil, nil, nil
+}
+
+// flusherHijackerWriter implements http.ResponseWriter, http.Flusher, and http.Hijacker.
+type flusherHijackerWriter struct {
+	http.ResponseWriter
+	flushed  bool
+	hijacked bool
+}
+
+func (w *flusherHijackerWriter) Flush() {
+	w.flushed = true
+}
+
+func (w *flusherHijackerWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	w.hijacked = true
+	return nil, nil, nil
 }
 
 // newTestMiddleware creates a Middleware with default options, failing the test on error.
