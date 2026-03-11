@@ -215,8 +215,8 @@ func TestIntegration_Storage_LockBlocksConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 
-	if max := maxConcurrent.Load(); max != 1 {
-		t.Errorf("max concurrent locks = %d, want 1", max)
+	if got := maxConcurrent.Load(); got != 1 {
+		t.Errorf("max concurrent locks = %d, want 1", got)
 	}
 }
 
