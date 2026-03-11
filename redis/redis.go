@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/bright-room/idem"
@@ -36,7 +37,7 @@ type Storage struct {
 type Option func(*Storage)
 
 // WithKeyPrefix sets the prefix for Redis keys.
-// Default is "idem:".
+// Default is "idem."
 func WithKeyPrefix(prefix string) Option {
 	return func(s *Storage) {
 		s.keyPrefix = prefix
@@ -69,7 +70,7 @@ func New(client goredis.Cmdable, opts ...Option) *Storage {
 func (s *Storage) Get(ctx context.Context, key string) (*idem.Response, error) {
 	data, err := s.client.Get(ctx, s.keyPrefix+key).Bytes()
 	if err != nil {
-		if err == goredis.Nil {
+		if errors.Is(err, goredis.Nil) {
 			return nil, nil
 		}
 		return nil, err
@@ -91,6 +92,12 @@ func (s *Storage) Set(ctx context.Context, key string, res *idem.Response, ttl t
 	}
 
 	return s.client.Set(ctx, s.keyPrefix+key, data, ttl).Err()
+}
+
+// Delete removes the cached response for the given key.
+// If the key does not exist, it returns nil.
+func (s *Storage) Delete(ctx context.Context, key string) error {
+	return s.client.Del(ctx, s.keyPrefix+key).Err()
 }
 
 // Lock acquires a distributed lock for the given key using Redis SET NX.

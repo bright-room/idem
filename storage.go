@@ -14,4 +14,8 @@ type Storage interface {
 	// Set stores the response for the given key.
 	// ttl specifies the time-to-live for the cache entry.
 	Set(ctx context.Context, key string, res *Response, ttl time.Duration) error
+
+	// Delete removes the cached response for the given key.
+	// If the key does not exist, it returns nil.
+	Delete(ctx context.Context, key string) error
 }

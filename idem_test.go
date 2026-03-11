@@ -145,6 +145,44 @@ func TestMemoryStorage_Get(t *testing.T) {
 	}
 }
 
+func TestMemoryStorage_Delete(t *testing.T) {
+	t.Parallel()
+
+	t.Run("deletes existing key", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewMemoryStorage()
+		ctx := context.Background()
+		res := &Response{StatusCode: http.StatusOK, Body: []byte("data")}
+
+		if err := s.Set(ctx, "key-1", res, time.Hour); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if err := s.Delete(ctx, "key-1"); err != nil {
+			t.Fatalf("Delete() error = %v", err)
+		}
+
+		got, err := s.Get(ctx, "key-1")
+		if err != nil {
+			t.Fatalf("Get() error = %v", err)
+		}
+		if got != nil {
+			t.Errorf("Get() = %v, want nil", got)
+		}
+	})
+
+	t.Run("returns nil for non-existent key", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewMemoryStorage()
+
+		if err := s.Delete(context.Background(), "unknown"); err != nil {
+			t.Errorf("Delete() error = %v, want nil", err)
+		}
+	})
+}
+
 func TestMemoryStorage_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 
@@ -167,6 +205,7 @@ func TestMemoryStorage_ConcurrentAccess(t *testing.T) {
 
 			_ = s.Set(ctx, key, res, time.Hour)
 			_, _ = s.Get(ctx, key)
+			_ = s.Delete(ctx, key)
 		}()
 	}
 

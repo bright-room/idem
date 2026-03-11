@@ -14,6 +14,8 @@ func (s *stubStorage) Set(_ context.Context, _ string, _ *Response, _ time.Durat
 	return nil
 }
 
+func (s *stubStorage) Delete(_ context.Context, _ string) error { return nil }
+
 func TestDefaultConfig(t *testing.T) {
 	t.Parallel()
 

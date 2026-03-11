@@ -133,6 +133,7 @@ Implement the `Storage` interface to use any backend:
 type Storage interface {
 	Get(ctx context.Context, key string) (*idem.Response, error)
 	Set(ctx context.Context, key string, res *idem.Response, ttl time.Duration) error
+	Delete(ctx context.Context, key string) error
 }
 ```
 

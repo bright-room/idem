@@ -31,7 +31,7 @@ make shell          # Interactive bash in container
 - **`_examples/`**: Framework-specific usage examples (Gin, Echo, Chi)
 
 Key interfaces:
-- `Storage` — `Get`/`Set` for cached responses (pluggable backend)
+- `Storage` — `Get`/`Set`/`Delete` for cached responses (pluggable backend)
 - `Locker` — optional per-key mutual exclusion for concurrent request handling. Storage implementations that also implement `Locker` enable automatic lock acquisition in the middleware. Returns 409 Conflict on lock failure.
 
 Configuration uses the **Functional Options** pattern (`WithXxx()` functions).
