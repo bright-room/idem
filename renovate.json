@@ -1,9 +1,17 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended"
+  ],
   "timezone": "Asia/Tokyo",
-  "labels": ["dependencies", "renovate"],
-  "schedule": ["after 9am and before 12am on saturday"],
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
+  "schedule": [
+    "after 9am on saturday",
+    "before 12am on saturday"
+  ],
   "prConcurrentLimit": 0,
   "prHourlyLimit": 0,
   "separateMinorPatch": true,
@@ -12,19 +20,30 @@
   "major": {
     "minimumReleaseAge": "3 days"
   },
-  "postUpdateOptions": ["gomodTidy"],
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
   "packageRules": [
     {
       "groupName": "Github actions families",
-      "matchManagers": ["github-actions"],
-      "matchPackageNames": ["actions{/,}**"]
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "actions{/,}**"
+      ]
     },
     {
       "groupName": "golang",
-      "matchPackageNames": ["go"]
+      "matchPackageNames": [
+        "go"
+      ]
     },
     {
-      "matchUpdateTypes": ["patch", "minor"],
+      "matchUpdateTypes": [
+        "patch",
+        "minor"
+      ],
       "automerge": true
     }
   ]
