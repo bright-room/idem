@@ -84,7 +84,7 @@ if err != nil {
 
 ### Metrics
 
-Use `WithMetrics` to observe cache hits, misses, and errors — for example, to export to Prometheus:
+Use `WithMetrics` to observe cache hits, misses, lock contention, and errors — for example, to export to Prometheus:
 
 ```go
 mw, err := idem.New(
@@ -95,6 +95,9 @@ mw, err := idem.New(
 		OnCacheMiss: func(key string) {
 			cacheMisses.WithLabelValues(key).Inc()
 		},
+		OnLockContention: func(key string, err error) {
+			lockContentions.WithLabelValues(key).Inc()
+		},
 		OnError: func(key string, err error) {
 			cacheErrors.WithLabelValues(key).Inc()
 		},
@@ -102,7 +105,7 @@ mw, err := idem.New(
 )
 ```
 
-All callback fields are optional — nil callbacks are never invoked and add no overhead. Requests without an idempotency key bypass the middleware entirely and do not trigger any metrics callbacks.
+All callback fields are optional — nil callbacks are never invoked and add no overhead. Lock contention (409 Conflict) is reported exclusively via `OnLockContention` and does not trigger `OnError`. Requests without an idempotency key bypass the middleware entirely and do not trigger any metrics callbacks.
 
 ## How It Works
 
