@@ -74,6 +74,10 @@ func New(client goredis.Cmdable, opts ...Option) (*Storage, error) {
 
 // validate checks the Storage configuration for invalid values.
 func (s *Storage) validate() error {
+	if s.client == nil {
+		return errors.New("redis: client must not be nil")
+	}
+
 	if s.keyPrefix == "" {
 		return errors.New("redis: keyPrefix must not be empty")
 	}
