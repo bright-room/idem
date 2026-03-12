@@ -65,6 +65,7 @@ The first request executes the handler and caches the response. Subsequent reque
 | `WithStorage(s)` | In-memory | Storage backend for cached responses |
 | `WithOnError(fn)` | `nil` | Callback invoked when a storage operation fails |
 | `WithMetrics(m)` | `nil` | Callbacks for observing cache hits, misses, and errors |
+| `WithValidation(v...)` | none | Custom validators run during `New()` after built-in checks |
 
 ```go
 mw, err := idem.New(
@@ -81,6 +82,24 @@ if err != nil {
 ```
 
 `New` validates the configuration and returns an error for invalid values such as an empty key header or a non-positive TTL.
+
+### Custom Validation
+
+Use `WithValidation` to enforce application-specific rules on the middleware configuration:
+
+```go
+mw, err := idem.New(
+	idem.WithTTL(30 * time.Minute),
+	idem.WithValidation(func(cfg idem.Config) error {
+		if cfg.TTL > 1*time.Hour {
+			return fmt.Errorf("TTL must not exceed 1 hour, got %v", cfg.TTL)
+		}
+		return nil
+	}),
+)
+```
+
+Validators receive a read-only `Config` snapshot and run after the built-in checks. Multiple validators execute in registration order; validation stops at the first error.
 
 ### Metrics
 
