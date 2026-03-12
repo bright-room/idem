@@ -1,0 +1,76 @@
+services:
+  app-1:
+    build:
+      context: ../..
+      dockerfile: _examples/redis-cluster-gin/Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      REDIS_CLUSTER_ADDRS: "redis-cluster-node-1:7000,redis-cluster-node-2:7001,redis-cluster-node-3:7002"
+      HOSTNAME: app-1
+    depends_on:
+      redis-cluster-init:
+        condition: service_completed_successfully
+
+  app-2:
+    build:
+      context: ../..
+      dockerfile: _examples/redis-cluster-gin/Dockerfile
+    ports:
+      - "8082:8080"
+    environment:
+      REDIS_CLUSTER_ADDRS: "redis-cluster-node-1:7000,redis-cluster-node-2:7001,redis-cluster-node-3:7002"
+      HOSTNAME: app-2
+    depends_on:
+      redis-cluster-init:
+        condition: service_completed_successfully
+
+  redis-cluster-node-1:
+    image: redis:8-alpine
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --port 7000
+      --bind 0.0.0.0
+      --cluster-node-timeout 5000
+      --appendonly yes
+
+  redis-cluster-node-2:
+    image: redis:8-alpine
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --port 7001
+      --bind 0.0.0.0
+      --cluster-node-timeout 5000
+      --appendonly yes
+
+  redis-cluster-node-3:
+    image: redis:8-alpine
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --port 7002
+      --bind 0.0.0.0
+      --cluster-node-timeout 5000
+      --appendonly yes
+
+  redis-cluster-init:
+    image: redis:8-alpine
+    depends_on:
+      - redis-cluster-node-1
+      - redis-cluster-node-2
+      - redis-cluster-node-3
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sleep 2
+        redis-cli --cluster create \
+          redis-cluster-node-1:7000 \
+          redis-cluster-node-2:7001 \
+          redis-cluster-node-3:7002 \
+          --cluster-replicas 0 --cluster-yes
