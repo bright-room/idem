@@ -2,6 +2,7 @@ package idem
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -178,6 +179,81 @@ func TestConfig_validate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "custom validator passes",
+			cfg: func() *config {
+				c := defaultConfig()
+				WithValidation(func(_ Config) error {
+					return nil
+				})(c)
+				return c
+			}(),
+			wantErr: false,
+		},
+		{
+			name: "custom validator fails",
+			cfg: func() *config {
+				c := defaultConfig()
+				WithValidation(func(_ Config) error {
+					return errors.New("custom: validation failed")
+				})(c)
+				return c
+			}(),
+			wantErr: true,
+		},
+		{
+			name: "multiple validators stop at first error",
+			cfg: func() *config {
+				c := defaultConfig()
+				second := false
+				WithValidation(
+					func(_ Config) error {
+						return errors.New("first fails")
+					},
+					func(_ Config) error {
+						second = true
+						_ = second
+						return nil
+					},
+				)(c)
+				return c
+			}(),
+			wantErr: true,
+		},
+		{
+			name: "custom validator receives config snapshot",
+			cfg: func() *config {
+				c := &config{
+					keyHeader: "X-Test",
+					ttl:       5 * time.Minute,
+				}
+				WithValidation(func(cfg Config) error {
+					if cfg.KeyHeader != "X-Test" {
+						return errors.New("unexpected KeyHeader")
+					}
+					if cfg.TTL != 5*time.Minute {
+						return errors.New("unexpected TTL")
+					}
+					return nil
+				})(c)
+				return c
+			}(),
+			wantErr: false,
+		},
+		{
+			name: "built-in validation runs before custom validators",
+			cfg: func() *config {
+				c := &config{
+					keyHeader: "",
+					ttl:       DefaultTTL,
+				}
+				WithValidation(func(_ Config) error {
+					return errors.New("should not reach here")
+				})(c)
+				return c
+			}(),
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -190,4 +266,76 @@ func TestConfig_validate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWithValidation(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+
+	called := false
+	v := func(_ Config) error {
+		called = true
+		return nil
+	}
+	WithValidation(v)(cfg)
+
+	if len(cfg.validators) != 1 {
+		t.Fatalf("validators length = %d, want 1", len(cfg.validators))
+	}
+
+	if err := cfg.validators[0](cfg.snapshot()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !called {
+		t.Error("validator was not called")
+	}
+}
+
+func TestConfig_snapshot(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config{
+		keyHeader: "X-Custom-Key",
+		ttl:       10 * time.Minute,
+	}
+
+	snap := cfg.snapshot()
+
+	if snap.KeyHeader != cfg.keyHeader {
+		t.Errorf("KeyHeader = %q, want %q", snap.KeyHeader, cfg.keyHeader)
+	}
+	if snap.TTL != cfg.ttl {
+		t.Errorf("TTL = %v, want %v", snap.TTL, cfg.ttl)
+	}
+}
+
+func TestNew_withCustomValidation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns error from custom validator", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := New(WithValidation(func(_ Config) error {
+			return errors.New("custom: not allowed")
+		}))
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("succeeds with passing custom validator", func(t *testing.T) {
+		t.Parallel()
+
+		m, err := New(WithValidation(func(_ Config) error {
+			return nil
+		}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if m == nil {
+			t.Fatal("middleware is nil")
+		}
+	})
 }

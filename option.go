@@ -13,12 +13,35 @@ const (
 	DefaultTTL = 24 * time.Hour
 )
 
+// Config is a read-only snapshot of the middleware configuration.
+// It is passed to Validator functions so they can inspect—but not modify—the
+// settings that will be used by the middleware.
+type Config struct {
+	// KeyHeader is the HTTP header name used to retrieve the idempotency key.
+	KeyHeader string
+
+	// TTL is the time-to-live for cached responses.
+	TTL time.Duration
+}
+
+// Validator is a function that inspects the middleware configuration and
+// returns an error if it does not meet application-specific requirements.
+type Validator func(Config) error
+
 type config struct {
-	keyHeader string
-	ttl       time.Duration
-	storage   Storage
-	onError   func(error)
-	metrics   *Metrics
+	keyHeader  string
+	ttl        time.Duration
+	storage    Storage
+	onError    func(error)
+	metrics    *Metrics
+	validators []Validator
+}
+
+func (c *config) snapshot() Config {
+	return Config{
+		KeyHeader: c.keyHeader,
+		TTL:       c.ttl,
+	}
 }
 
 // defaultConfig returns a config with sensible defaults.
@@ -62,6 +85,16 @@ func WithOnError(fn func(error)) Option {
 	}
 }
 
+// WithValidation registers one or more custom validators that run during
+// middleware initialization. Validators execute in registration order,
+// after the built-in checks (non-empty keyHeader, positive ttl).
+// Validation stops at the first error.
+func WithValidation(validators ...Validator) Option {
+	return func(c *config) {
+		c.validators = append(c.validators, validators...)
+	}
+}
+
 // validate checks the config for invalid values.
 func (c *config) validate() error {
 	if c.keyHeader == "" {
@@ -70,6 +103,13 @@ func (c *config) validate() error {
 
 	if c.ttl <= 0 {
 		return errors.New("idem: ttl must be positive")
+	}
+
+	snap := c.snapshot()
+	for _, v := range c.validators {
+		if err := v(snap); err != nil {
+			return err
+		}
 	}
 
 	return nil
