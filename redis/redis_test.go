@@ -47,10 +47,22 @@ func newTestStorage(t *testing.T, client goredis.Cmdable, opts ...iredis.Option)
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	t.Run("accepts default config", func(t *testing.T) {
+	// stub client for validation-only tests (no actual Redis connection needed)
+	stub := goredis.NewClient(&goredis.Options{})
+
+	t.Run("returns error for nil client", func(t *testing.T) {
 		t.Parallel()
 
 		_, err := iredis.New(nil)
+		if err == nil {
+			t.Fatal("New(nil) error = nil, want error")
+		}
+	})
+
+	t.Run("accepts default config", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := iredis.New(stub)
 		if err != nil {
 			t.Fatalf("New() error = %v", err)
 		}
@@ -59,7 +71,7 @@ func TestNew(t *testing.T) {
 	t.Run("accepts valid custom prefixes", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := iredis.New(nil, iredis.WithKeyPrefix("custom:"), iredis.WithLockPrefix("custom:lock:"))
+		_, err := iredis.New(stub, iredis.WithKeyPrefix("custom:"), iredis.WithLockPrefix("custom:lock:"))
 		if err != nil {
 			t.Fatalf("New() error = %v", err)
 		}
@@ -68,7 +80,7 @@ func TestNew(t *testing.T) {
 	t.Run("returns error for empty keyPrefix", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := iredis.New(nil, iredis.WithKeyPrefix(""))
+		_, err := iredis.New(stub, iredis.WithKeyPrefix(""))
 		if err == nil {
 			t.Fatal("New() error = nil, want error")
 		}
@@ -77,7 +89,7 @@ func TestNew(t *testing.T) {
 	t.Run("returns error for empty lockPrefix", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := iredis.New(nil, iredis.WithLockPrefix(""))
+		_, err := iredis.New(stub, iredis.WithLockPrefix(""))
 		if err == nil {
 			t.Fatal("New() error = nil, want error")
 		}
