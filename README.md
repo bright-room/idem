@@ -283,6 +283,27 @@ curl -X POST http://localhost:8082/orders -H "Idempotency-Key: key-123"
 
 See [`_examples/redis-gin/`](./_examples/redis-gin/) for the full setup.
 
+### Docker Compose (Prometheus Metrics)
+
+Export idempotency metrics to Prometheus using `WithMetrics`:
+
+```bash
+cd _examples/prometheus-gin && docker compose up --build
+```
+
+```bash
+# Send requests to generate cache hits and misses
+curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
+curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
+
+# Check metrics
+curl http://localhost:8080/metrics | grep idem_
+```
+
+Open Prometheus UI at [http://localhost:9090](http://localhost:9090) to query `idem_cache_hits_total`, `idem_cache_misses_total`, and more.
+
+See [`_examples/prometheus-gin/`](./_examples/prometheus-gin/) for the full setup.
+
 ## Roadmap
 
 | Phase | Status | Description |
