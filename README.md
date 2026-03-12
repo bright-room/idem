@@ -241,6 +241,26 @@ curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
 
 See [`_examples/chi/main.go`](./_examples/chi/main.go) for the full source including inline (`r.With()`) and route-group middleware patterns.
 
+### Docker Compose (Multi-instance with Redis)
+
+For a production-like setup with Redis storage shared across multiple instances:
+
+```bash
+cd _examples/redis-gin && docker compose up --build
+```
+
+```bash
+# Request to instance 1 — handler executes, response cached in Redis
+curl -X POST http://localhost:8081/orders -H "Idempotency-Key: key-123"
+# => {"instance_id":"app-1","message":"order created","order_id":"order-1"}
+
+# Same key to instance 2 — cached response returned from Redis (same instance_id!)
+curl -X POST http://localhost:8082/orders -H "Idempotency-Key: key-123"
+# => {"instance_id":"app-1","message":"order created","order_id":"order-1"}
+```
+
+See [`_examples/redis-gin/`](./_examples/redis-gin/) for the full setup.
+
 ## Roadmap
 
 | Phase | Status | Description |
