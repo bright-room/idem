@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -399,4 +400,253 @@ func TestIntegration_Storage_ImplementsLocker(t *testing.T) {
 	if _, ok := s.(idem.Locker); !ok {
 		t.Error("redis.Storage does not implement idem.Locker")
 	}
+}
+
+// --- Redis Cluster integration tests ---
+
+func newTestClusterClient(t *testing.T) goredis.Cmdable {
+	t.Helper()
+
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	addrs := os.Getenv("REDIS_CLUSTER_ADDRS")
+	if addrs == "" {
+		t.Skip("REDIS_CLUSTER_ADDRS not set, skipping cluster test")
+	}
+
+	client := goredis.NewClusterClient(&goredis.ClusterOptions{
+		Addrs: strings.Split(addrs, ","),
+	})
+	t.Cleanup(func() { _ = client.Close() })
+
+	return client
+}
+
+func TestIntegration_ClusterStorage_SetAndGet(t *testing.T) {
+	client := newTestClusterClient(t)
+	s := newTestStorage(t, client)
+	ctx := context.Background()
+	key := "cluster-test-set-and-get"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:"+key) })
+
+	want := &idem.Response{
+		StatusCode: http.StatusOK,
+		Header:     map[string][]string{"Content-Type": {"application/json"}},
+		Body:       []byte(`{"ok":true}`),
+	}
+
+	if err := s.Set(ctx, key, want, time.Hour); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	got, err := s.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got == nil {
+		t.Fatal("Get() = nil, want non-nil")
+	}
+	if got.StatusCode != want.StatusCode {
+		t.Errorf("StatusCode = %d, want %d", got.StatusCode, want.StatusCode)
+	}
+	if http.Header(got.Header).Get("Content-Type") != http.Header(want.Header).Get("Content-Type") {
+		t.Errorf("Header Content-Type = %q, want %q",
+			http.Header(got.Header).Get("Content-Type"), http.Header(want.Header).Get("Content-Type"))
+	}
+	if string(got.Body) != string(want.Body) {
+		t.Errorf("Body = %q, want %q", got.Body, want.Body)
+	}
+}
+
+func TestIntegration_ClusterStorage_GetReturnsNilForNonExistentKey(t *testing.T) {
+	client := newTestClusterClient(t)
+	s := newTestStorage(t, client)
+
+	got, err := s.Get(context.Background(), "cluster-non-existent-key")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got != nil {
+		t.Errorf("Get() = %v, want nil", got)
+	}
+}
+
+func TestIntegration_ClusterStorage_GetReturnsNilAfterTTLExpired(t *testing.T) {
+	client := newTestClusterClient(t)
+	s := newTestStorage(t, client)
+	ctx := context.Background()
+	key := "cluster-test-ttl-expired"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:"+key) })
+
+	res := &idem.Response{
+		StatusCode: http.StatusOK,
+		Body:       []byte("expired"),
+	}
+
+	if err := s.Set(ctx, key, res, 100*time.Millisecond); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	got, err := s.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got != nil {
+		t.Errorf("Get() = %v, want nil", got)
+	}
+}
+
+func TestIntegration_ClusterStorage_Delete(t *testing.T) {
+	client := newTestClusterClient(t)
+	s := newTestStorage(t, client)
+	ctx := context.Background()
+	key := "cluster-test-delete"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:"+key) })
+
+	res := &idem.Response{
+		StatusCode: http.StatusOK,
+		Header:     map[string][]string{"Content-Type": {"application/json"}},
+		Body:       []byte(`{"ok":true}`),
+	}
+
+	if err := s.Set(ctx, key, res, time.Hour); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	if err := s.Delete(ctx, key); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	got, err := s.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got != nil {
+		t.Errorf("Get() = %v, want nil", got)
+	}
+}
+
+func TestIntegration_ClusterStorage_DeleteNonExistentKey(t *testing.T) {
+	client := newTestClusterClient(t)
+	s := newTestStorage(t, client)
+
+	if err := s.Delete(context.Background(), "cluster-non-existent-delete-key"); err != nil {
+		t.Errorf("Delete() error = %v, want nil", err)
+	}
+}
+
+func TestIntegration_ClusterStorage_LockAndUnlock(t *testing.T) {
+	client := newTestClusterClient(t)
+	s := newTestStorage(t, client)
+	ctx := context.Background()
+	key := "cluster-test-lock-basic"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:lock:"+key) })
+
+	unlock, err := s.Lock(ctx, key, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Lock() error = %v", err)
+	}
+
+	unlock()
+}
+
+func TestIntegration_ClusterStorage_LockBlocksConcurrentAccess(t *testing.T) {
+	client := newTestClusterClient(t)
+	s := newTestStorage(t, client)
+	ctx := context.Background()
+	key := "cluster-test-lock-concurrent"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:lock:"+key) })
+
+	var concurrent atomic.Int32
+	var maxConcurrent atomic.Int32
+
+	var wg sync.WaitGroup
+	const goroutines = 5
+
+	for range goroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			unlock, err := s.Lock(ctx, key, 5*time.Second)
+			if err != nil {
+				t.Errorf("Lock() error = %v", err)
+				return
+			}
+
+			cur := concurrent.Add(1)
+			if cur > maxConcurrent.Load() {
+				maxConcurrent.Store(cur)
+			}
+			time.Sleep(10 * time.Millisecond)
+			concurrent.Add(-1)
+
+			unlock()
+		}()
+	}
+
+	wg.Wait()
+
+	if got := maxConcurrent.Load(); got != 1 {
+		t.Errorf("max concurrent locks = %d, want 1", got)
+	}
+}
+
+func TestIntegration_ClusterStorage_LockRespectsContextCancellation(t *testing.T) {
+	client := newTestClusterClient(t)
+	s := newTestStorage(t, client)
+	ctx := context.Background()
+	key := "cluster-test-lock-cancel"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:lock:"+key) })
+
+	// Hold the lock
+	unlock, err := s.Lock(ctx, key, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Lock() error = %v", err)
+	}
+	defer unlock()
+
+	// Try to acquire with short timeout
+	cancelCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+
+	_, err = s.Lock(cancelCtx, key, 5*time.Second)
+	if err == nil {
+		t.Fatal("Lock() error = nil, want context error")
+	}
+}
+
+func TestIntegration_ClusterStorage_LockTTLExpiration(t *testing.T) {
+	client := newTestClusterClient(t)
+	s := newTestStorage(t, client)
+	ctx := context.Background()
+	key := "cluster-test-lock-ttl"
+
+	t.Cleanup(func() { client.Del(ctx, "idem:lock:"+key) })
+
+	// Acquire lock with short TTL (don't unlock manually)
+	_, err := s.Lock(ctx, key, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("first Lock() error = %v", err)
+	}
+
+	// Wait for TTL to expire
+	time.Sleep(300 * time.Millisecond)
+
+	// Should be able to acquire lock now
+	unlock, err := s.Lock(ctx, key, 5*time.Second)
+	if err != nil {
+		t.Fatalf("second Lock() error = %v", err)
+	}
+	unlock()
 }

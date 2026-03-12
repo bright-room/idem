@@ -71,6 +71,34 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Start Redis Cluster
+        run: |
+          for port in 7000 7001 7002; do
+            docker run -d --name redis-cluster-$port -p $port:$port \
+              redis:8-alpine redis-server \
+              --cluster-enabled yes \
+              --cluster-config-file nodes.conf \
+              --port $port \
+              --bind 0.0.0.0 \
+              --cluster-node-timeout 5000 \
+              --cluster-announce-ip 127.0.0.1 \
+              --cluster-announce-port $port \
+              --appendonly yes
+          done
+
+          for port in 7000 7001 7002; do
+            for i in $(seq 1 30); do
+              if docker exec redis-cluster-$port redis-cli -p $port ping 2>/dev/null | grep -q PONG; then
+                break
+              fi
+              sleep 1
+            done
+          done
+
+          docker exec redis-cluster-7000 redis-cli --cluster create \
+            127.0.0.1:7000 127.0.0.1:7001 127.0.0.1:7002 \
+            --cluster-replicas 0 --cluster-yes
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -79,6 +107,8 @@ jobs:
         run: go install gotest.tools/gotestsum@latest
 
       - name: Run integration tests
+        env:
+          REDIS_CLUSTER_ADDRS: "localhost:7000,localhost:7001,localhost:7002"
         run: |
           gotestsum \
             --junitfile integration-test-report.xml \
