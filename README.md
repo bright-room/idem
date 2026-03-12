@@ -283,6 +283,28 @@ curl -X POST http://localhost:8082/orders -H "Idempotency-Key: key-123"
 
 See [`_examples/redis-gin/`](./_examples/redis-gin/) for the full setup.
 
+### Docker Compose (Multi-instance with Redis Cluster)
+
+For a high-availability setup with a 3-node Redis Cluster shared across multiple instances:
+
+```bash
+cd _examples/redis-cluster-gin && docker compose up --build
+```
+
+```bash
+# Request to instance 1 — handler executes, response cached in Redis Cluster
+curl -X POST http://localhost:8081/orders -H "Idempotency-Key: key-123"
+# => {"instance_id":"app-1","message":"order created","order_id":"order-1"}
+
+# Same key to instance 2 — cached response returned from Redis Cluster (same instance_id!)
+curl -X POST http://localhost:8082/orders -H "Idempotency-Key: key-123"
+# => {"instance_id":"app-1","message":"order created","order_id":"order-1"}
+```
+
+The `idem/redis` package accepts `goredis.Cmdable`, so switching from `*redis.Client` to `*redis.ClusterClient` requires no code changes.
+
+See [`_examples/redis-cluster-gin/`](./_examples/redis-cluster-gin/) for the full setup.
+
 ### Docker Compose (Prometheus Metrics)
 
 Export idempotency metrics to Prometheus using `WithMetrics`:
