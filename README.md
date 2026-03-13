@@ -165,7 +165,7 @@ mw, err := idem.New() // uses in-memory storage
 
 ### Redis
 
-For multi-instance deployments where idempotency state must be shared across processes.
+For multi-instance deployments where idempotency state must be shared across processes. The `idem/redis` package accepts `goredis.Cmdable`, so it works with standalone, cluster, and sentinel (failover) clients.
 
 ```go
 import (
@@ -174,7 +174,20 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
+// Standalone
 client := goredis.NewClient(&goredis.Options{Addr: "localhost:6379"})
+
+// Cluster
+// client := goredis.NewClusterClient(&goredis.ClusterOptions{
+// 	Addrs: []string{"localhost:7000", "localhost:7001", "localhost:7002"},
+// })
+
+// Sentinel (Failover)
+// client := goredis.NewFailoverClient(&goredis.FailoverOptions{
+// 	MasterName:    "mymaster",
+// 	SentinelAddrs: []string{"localhost:26379", "localhost:26380", "localhost:26381"},
+// })
+
 store, err := idemredis.New(client)
 if err != nil {
 	log.Fatal(err)
@@ -304,6 +317,21 @@ curl -X POST http://localhost:8082/orders -H "Idempotency-Key: key-123"
 The `idem/redis` package accepts `goredis.Cmdable`, so switching from `*redis.Client` to `*redis.ClusterClient` requires no code changes.
 
 See [`_examples/redis-cluster-gin/`](./_examples/redis-cluster-gin/) for the full setup.
+
+### Redis Sentinel (Failover)
+
+The `idem/redis` package also works with Redis Sentinel via `goredis.NewFailoverClient`:
+
+```go
+client := goredis.NewFailoverClient(&goredis.FailoverOptions{
+	MasterName:    "mymaster",
+	SentinelAddrs: []string{"localhost:26379", "localhost:26380", "localhost:26381"},
+})
+
+store, err := idemredis.New(client)
+```
+
+See [`_examples/redis-sentinel-gin/main.go`](./_examples/redis-sentinel-gin/main.go) for a full Gin example.
 
 ### Docker Compose (Prometheus Metrics)
 

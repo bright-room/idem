@@ -10,7 +10,7 @@ Module: `github.com/bright-room/idem` | Go 1.25.5 | Pre-v1.0
 
 ## Development Commands
 
-All commands run inside Docker (via `compose.yml`). Use `make build` first to build the image. The `compose.yml` includes standalone Redis and a 3-node Redis Cluster (ports 7000-7002) for integration tests.
+All commands run inside Docker (via `compose.yml`). Use `make build` first to build the image. The `compose.yml` includes standalone Redis, a 3-node Redis Cluster (ports 7000-7002), and a Redis Sentinel setup (master + replica + 3 sentinels on ports 26379-26381) for integration tests.
 
 ```bash
 make build          # Build Docker image
@@ -39,7 +39,7 @@ Configuration uses the **Functional Options** pattern (`WithXxx()` functions).
 ## Conventions
 
 - **Linting**: golangci-lint v2.10.1 with gofumpt formatting. Zero tolerance (no issue limits). See `.golangci.yml` for enabled linters.
-- **Testing**: Table-driven tests, `gotestsum` with testdox output, `-race` flag. Integration tests use `Integration` prefix in test names. Redis Cluster tests require `REDIS_CLUSTER_ADDRS` env var (comma-separated addresses); skipped when unset.
+- **Testing**: Table-driven tests, `gotestsum` with testdox output, `-race` flag. Integration tests use `Integration` prefix in test names. Redis Cluster tests require `REDIS_CLUSTER_ADDRS` env var (comma-separated addresses); skipped when unset. Redis Sentinel tests require `REDIS_SENTINEL_ADDRS` (comma-separated sentinel addresses) and optionally `REDIS_SENTINEL_MASTER` (defaults to `mymaster`); skipped when unset.
 - **Naming**: Short receiver names (`s`, `m`). Interface names use "-er" suffix.
 - **Git branching**: `feat/issue-number-description` or `fix/issue-number-description`. PR titles prefixed with `Close #IssueNumber`.
 
