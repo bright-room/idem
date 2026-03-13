@@ -33,16 +33,84 @@ type memoryEntry struct {
 
 // MemoryStorage is an in-memory implementation of Storage.
 // It also implements Locker for per-key mutual exclusion.
+//
+// For production environments, consider using the redis.Storage backend
+// which provides automatic TTL-based expiration without additional configuration.
 type MemoryStorage struct {
-	mu      sync.RWMutex
-	entries map[string]*memoryEntry
-	locks   sync.Map
+	mu              sync.RWMutex
+	entries         map[string]*memoryEntry
+	locks           sync.Map
+	cleanupInterval time.Duration
+	done            chan struct{}
+}
+
+// MemoryStorageOption configures a MemoryStorage.
+type MemoryStorageOption func(*MemoryStorage)
+
+// WithCleanupInterval sets the interval for background cleanup of expired entries.
+// When set to a positive duration, a background goroutine periodically removes
+// expired entries to prevent memory growth from unused keys.
+// Call Close to stop the background goroutine.
+func WithCleanupInterval(d time.Duration) MemoryStorageOption {
+	return func(s *MemoryStorage) {
+		s.cleanupInterval = d
+	}
 }
 
 // NewMemoryStorage creates a new in-memory Storage.
-func NewMemoryStorage() *MemoryStorage {
-	return &MemoryStorage{
+func NewMemoryStorage(opts ...MemoryStorageOption) *MemoryStorage {
+	s := &MemoryStorage{
 		entries: make(map[string]*memoryEntry),
+		done:    make(chan struct{}),
+	}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	if s.cleanupInterval > 0 {
+		go s.startCleanup()
+	}
+
+	return s
+}
+
+// Close stops the background cleanup goroutine, if running.
+func (s *MemoryStorage) Close() error {
+	select {
+	case <-s.done:
+		// already closed
+	default:
+		close(s.done)
+	}
+
+	return nil
+}
+
+func (s *MemoryStorage) startCleanup() {
+	ticker := time.NewTicker(s.cleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.deleteExpired()
+		case <-s.done:
+			return
+		}
+	}
+}
+
+func (s *MemoryStorage) deleteExpired() {
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for key, e := range s.entries {
+		if now.After(e.expiresAt) {
+			delete(s.entries, key)
+		}
 	}
 }
 
@@ -59,7 +127,9 @@ func (s *MemoryStorage) Get(_ context.Context, key string) (*Response, error) {
 
 	if time.Now().After(e.expiresAt) {
 		s.mu.Lock()
-		delete(s.entries, key)
+		if current, exists := s.entries[key]; exists && current == e {
+			delete(s.entries, key)
+		}
 		s.mu.Unlock()
 
 		return nil, nil

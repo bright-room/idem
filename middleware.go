@@ -29,6 +29,11 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 				return
 			}
 
+			if m.cfg.keyMaxLength > 0 && len(key) > m.cfg.keyMaxLength {
+				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+				return
+			}
+
 			if locker, ok := m.cfg.storage.(Locker); ok {
 				unlock, err := locker.Lock(r.Context(), key, m.cfg.ttl)
 				if err != nil {
@@ -119,7 +124,7 @@ func (r *responseRecorder) Write(b []byte) (int, error) {
 func (r *responseRecorder) toResponse() *Response {
 	header := make(map[string][]string)
 	for k, v := range r.Header() {
-		header[k] = v
+		header[k] = append([]string(nil), v...)
 	}
 
 	return &Response{

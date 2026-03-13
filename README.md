@@ -429,14 +429,3 @@ curl http://localhost:8080/metrics | grep idem_
 Open Prometheus UI at [http://localhost:9090](http://localhost:9090) to query `idem_cache_hits_total`, `idem_cache_misses_total`, and more.
 
 See [`_examples/prometheus-gin/`](./_examples/prometheus-gin/) for the full setup.
-
-## Roadmap
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| v0.1 | Planned | Core middleware + in-memory storage |
-| v0.2 | **Done** | Redis storage |
-| v0.3 | **Done** | Framework examples (Gin / Echo / Chi) |
-| v0.4 | **Done** | Concurrent request handling (lock mechanism) |
-| v0.5 | **Done** | Metrics hooks (cache hit/miss/error callbacks) |
-| v1.0 | Planned | Documentation + stable release |

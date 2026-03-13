@@ -41,7 +41,7 @@ jobs:
           gotestsum \
             --junitfile unit-test-report.xml \
             --format testdox \
-            -- -short -coverprofile=coverage.out ./...
+            -- -race -short -coverprofile=coverage.out ./...
 
       - name: Test Report
         uses: dorny/test-reporter@v2
@@ -158,7 +158,7 @@ jobs:
           gotestsum \
             --junitfile integration-test-report.xml \
             --format testdox \
-            -- -run Integration -count=1 -coverprofile=coverage-integration.out ./...
+            -- -race -run Integration -count=1 -coverprofile=coverage-integration.out ./...
 
       - name: Test Report
         uses: dorny/test-reporter@v2

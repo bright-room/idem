@@ -262,8 +262,11 @@ func runStorageTests(t *testing.T, name string, factory clientFactory) {
 					}
 
 					cur := concurrent.Add(1)
-					if cur > maxConcurrent.Load() {
-						maxConcurrent.Store(cur)
+					for {
+						old := maxConcurrent.Load()
+						if cur <= old || maxConcurrent.CompareAndSwap(old, cur) {
+							break
+						}
 					}
 					time.Sleep(10 * time.Millisecond)
 					concurrent.Add(-1)

@@ -290,8 +290,11 @@ func TestMemoryStorage_Lock(t *testing.T) {
 				}
 
 				cur := concurrent.Add(1)
-				if cur > maxConcurrent.Load() {
-					maxConcurrent.Store(cur)
+				for {
+					old := maxConcurrent.Load()
+					if cur <= old || maxConcurrent.CompareAndSwap(old, cur) {
+						break
+					}
 				}
 				time.Sleep(time.Millisecond)
 				concurrent.Add(-1)
