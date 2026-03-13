@@ -101,6 +101,28 @@ mw, err := idem.New(
 
 Validators receive a read-only `Config` snapshot and run after the built-in checks. Multiple validators execute in registration order; validation stops at the first error.
 
+#### Preset Validators
+
+Common validation rules are available as factory functions:
+
+| Validator | Description |
+|-----------|-------------|
+| `MaxTTL(max)` | Rejects a TTL longer than `max` |
+| `MinTTL(min)` | Rejects a TTL shorter than `min` |
+| `KeyHeaderPattern(re)` | Requires the key header name to match the regular expression |
+| `AllowedKeyHeaders(h...)` | Requires the key header name to be one of the allowed values |
+
+```go
+mw, err := idem.New(
+	idem.WithTTL(1 * time.Hour),
+	idem.WithValidation(
+		idem.MaxTTL(24 * time.Hour),
+		idem.MinTTL(1 * time.Minute),
+		idem.AllowedKeyHeaders("Idempotency-Key", "X-Request-Id"),
+	),
+)
+```
+
 ### Metrics
 
 Use `WithMetrics` to observe cache hits, misses, lock contention, and errors — for example, to export to Prometheus:
