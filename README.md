@@ -400,6 +400,10 @@ See [`_examples/redis-cluster-gin/`](./_examples/redis-cluster-gin/) for the ful
 
 The `idem/redis` package also works with Redis Sentinel via `goredis.NewFailoverClient`:
 
+```bash
+cd _examples/redis-sentinel-gin && docker compose up --build
+```
+
 ```go
 client := goredis.NewFailoverClient(&goredis.FailoverOptions{
 	MasterName:    "mymaster",
@@ -409,7 +413,17 @@ client := goredis.NewFailoverClient(&goredis.FailoverOptions{
 store, err := idemredis.New(client)
 ```
 
-See [`_examples/redis-sentinel-gin/main.go`](./_examples/redis-sentinel-gin/main.go) for a full Gin example.
+```bash
+# 1. Send a request to app-1 — handler executes, response cached via Sentinel master
+curl -X POST http://localhost:8081/orders -H "Idempotency-Key: key-123"
+# => {"instance_id":"app-1","message":"order created","order_id":"order-1"}
+
+# 2. Same key to app-2 — cached response returned (note: instance_id is still app-1)
+curl -X POST http://localhost:8082/orders -H "Idempotency-Key: key-123"
+# => {"instance_id":"app-1","message":"order created","order_id":"order-1"}
+```
+
+See [`_examples/redis-sentinel-gin/`](./_examples/redis-sentinel-gin/) for the full setup.
 
 ### Docker Compose (Prometheus Metrics)
 
