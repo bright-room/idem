@@ -1,0 +1,35 @@
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app-1
+      - app-2
+
+  app-1:
+    build:
+      context: ../..
+      dockerfile: _examples/nginx-redis-gin/Dockerfile
+    environment:
+      REDIS_ADDR: redis:6379
+      HOSTNAME: app-1
+    depends_on:
+      redis:
+        condition: service_started
+
+  app-2:
+    build:
+      context: ../..
+      dockerfile: _examples/nginx-redis-gin/Dockerfile
+    environment:
+      REDIS_ADDR: redis:6379
+      HOSTNAME: app-2
+    depends_on:
+      redis:
+        condition: service_started
+
+  redis:
+    image: redis:8-alpine
