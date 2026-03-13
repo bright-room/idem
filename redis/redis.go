@@ -139,7 +139,10 @@ func (s *Storage) Lock(ctx context.Context, key string, ttl time.Duration) (func
 		}
 		if ok {
 			return func() {
-				luaUnlockScript.Run(context.Background(), s.client, []string{lockKey}, lockValue)
+				// Best-effort unlock: the Locker interface defines unlock as func()
+				// so errors cannot be propagated. If the lock TTL has already expired,
+				// the Lua script returns 0 (no-op) which is safe.
+				_ = luaUnlockScript.Run(context.Background(), s.client, []string{lockKey}, lockValue).Err()
 			}, nil
 		}
 
@@ -153,6 +156,9 @@ func (s *Storage) Lock(ctx context.Context, key string, ttl time.Duration) (func
 
 func generateLockValue() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("idem/redis: crypto/rand.Read failed: " + err.Error())
+	}
+
 	return hex.EncodeToString(b)
 }

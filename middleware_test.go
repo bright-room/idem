@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -183,12 +184,12 @@ func TestMiddleware_Handler(t *testing.T) {
 		req.Header.Set("Idempotency-Key", "spy-key")
 		wrapped.ServeHTTP(httptest.NewRecorder(), req)
 
-		if store.getCalls != 1 {
-			t.Errorf("storage Get calls = %d, want 1", store.getCalls)
+		if got := store.getCalls.Load(); got != 1 {
+			t.Errorf("storage Get calls = %d, want 1", got)
 		}
 
-		if store.setCalls != 1 {
-			t.Errorf("storage Set calls = %d, want 1", store.setCalls)
+		if got := store.setCalls.Load(); got != 1 {
+			t.Errorf("storage Set calls = %d, want 1", got)
 		}
 	})
 
@@ -953,23 +954,23 @@ func newTestMiddleware(t *testing.T, opts ...Option) *Middleware {
 
 // spyStorage tracks Get/Set/Delete call counts.
 type spyStorage struct {
-	getCalls    int
-	setCalls    int
-	deleteCalls int
+	getCalls    atomic.Int32
+	setCalls    atomic.Int32
+	deleteCalls atomic.Int32
 }
 
 func (s *spyStorage) Get(_ context.Context, _ string) (*Response, error) {
-	s.getCalls++
+	s.getCalls.Add(1)
 	return nil, nil
 }
 
 func (s *spyStorage) Set(_ context.Context, _ string, _ *Response, _ time.Duration) error {
-	s.setCalls++
+	s.setCalls.Add(1)
 	return nil
 }
 
 func (s *spyStorage) Delete(_ context.Context, _ string) error {
-	s.deleteCalls++
+	s.deleteCalls.Add(1)
 	return nil
 }
 

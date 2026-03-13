@@ -48,12 +48,13 @@ type Config struct {
 type Validator func(Config) error
 
 type config struct {
-	keyHeader  string
-	ttl        time.Duration
-	storage    Storage
-	onError    func(error)
-	metrics    *Metrics
-	validators []Validator
+	keyHeader    string
+	ttl          time.Duration
+	keyMaxLength int
+	storage      Storage
+	onError      func(error)
+	metrics      *Metrics
+	validators   []Validator
 }
 
 func (c *config) snapshot() Config {
@@ -120,6 +121,15 @@ func WithStorage(s Storage) Option {
 func WithOnError(fn func(error)) Option {
 	return func(c *config) {
 		c.onError = fn
+	}
+}
+
+// WithKeyMaxLength sets the maximum allowed length for idempotency key values.
+// Requests with keys exceeding this length receive a 400 Bad Request response.
+// A value of 0 (default) disables the length check.
+func WithKeyMaxLength(n int) Option {
+	return func(c *config) {
+		c.keyMaxLength = n
 	}
 }
 
