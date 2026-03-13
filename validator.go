@@ -7,20 +7,20 @@ import (
 )
 
 // MaxTTL returns a Validator that rejects a TTL longer than max.
-func MaxTTL(max time.Duration) Validator {
+func MaxTTL(limit time.Duration) Validator {
 	return func(cfg Config) error {
-		if cfg.TTL > max {
-			return fmt.Errorf("idem: ttl %v exceeds maximum %v", cfg.TTL, max)
+		if cfg.TTL > limit {
+			return fmt.Errorf("idem: ttl %v exceeds maximum %v", cfg.TTL, limit)
 		}
 		return nil
 	}
 }
 
 // MinTTL returns a Validator that rejects a TTL shorter than min.
-func MinTTL(min time.Duration) Validator {
+func MinTTL(limit time.Duration) Validator {
 	return func(cfg Config) error {
-		if cfg.TTL < min {
-			return fmt.Errorf("idem: ttl %v is shorter than minimum %v", cfg.TTL, min)
+		if cfg.TTL < limit {
+			return fmt.Errorf("idem: ttl %v is shorter than minimum %v", cfg.TTL, limit)
 		}
 		return nil
 	}
