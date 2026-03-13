@@ -294,6 +294,8 @@ curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
 
 See [`_examples/gin/main.go`](./_examples/gin/main.go) for the full source including per-endpoint and route-group middleware patterns.
 
+> **Note:** The `wrapMiddleware` helper replaces `c.Writer` with a dual-write adapter (`recorderGinWriter`) so that Gin's `c.JSON()` writes flow through idem's response recorder for caching. On a cache hit, the inner handler is not called and `c.Abort()` is used to stop the Gin handler chain.
+
 ### Echo
 
 ```bash
