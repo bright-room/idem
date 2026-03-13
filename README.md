@@ -340,6 +340,28 @@ curl -X POST http://localhost:8082/orders -H "Idempotency-Key: key-123"
 
 See [`_examples/redis-gin/`](./_examples/redis-gin/) for the full setup.
 
+### Docker Compose (Nginx Reverse Proxy)
+
+For a production-like setup with Nginx load balancing across multiple instances:
+
+```bash
+cd _examples/nginx-redis-gin && docker compose up --build
+```
+
+```bash
+# All requests go through the single Nginx endpoint
+curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
+# => {"instance_id":"app-1","message":"order created","order_id":"order-1"}
+
+# Same key — cached response returned regardless of which backend Nginx selects
+curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
+# => {"instance_id":"app-1","message":"order created","order_id":"order-1"}
+```
+
+Nginx distributes requests via round-robin, while Redis ensures cached responses are shared across all instances.
+
+See [`_examples/nginx-redis-gin/`](./_examples/nginx-redis-gin/) for the full setup.
+
 ### Docker Compose (Multi-instance with Redis Cluster)
 
 For a high-availability setup with a 3-node Redis Cluster shared across multiple instances:
