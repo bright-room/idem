@@ -5,7 +5,6 @@ WORKDIR /src
 # Copy root module (idem library)
 COPY go.mod go.sum ./
 COPY *.go ./
-COPY memory/ memory/
 COPY redis/ redis/
 
 # Copy example module

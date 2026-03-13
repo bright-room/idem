@@ -5,7 +5,6 @@ WORKDIR /src
 # Copy root module (idem library)
 COPY go.mod go.sum ./
 COPY *.go ./
-COPY memory/ memory/
 
 # Copy example module
 COPY _examples/prometheus-gin/ ./_examples/prometheus-gin/
