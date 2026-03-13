@@ -266,6 +266,16 @@ If your `Storage` does not implement `Locker`, the middleware operates without l
 
 The [`_examples`](./_examples) directory contains runnable examples for popular frameworks.
 
+### Framework Integration
+
+| Framework | net/http compatible | Conversion method | Code example |
+|-----------|:-------------------:|-------------------|--------------|
+| **Chi** | ✅ | None — `mw.Handler()` works directly | `r.Use(idempotency.Handler())` |
+| **Echo** | — | `echo.WrapMiddleware()` built-in adapter | `e.Use(echo.WrapMiddleware(idempotency.Handler()))` |
+| **Gin** | — | Custom `wrapMiddleware()` helper function | `r.POST("/orders", wrap, handler)` |
+
+Chi is a `net/http` compatible router, so `mw.Handler()` works out of the box. Echo provides a built-in `echo.WrapMiddleware()` adapter to convert `func(http.Handler) http.Handler` into Echo middleware. Gin requires a `gin.HandlerFunc` signature, so a custom helper function is needed to wrap the standard middleware.
+
 ### Gin
 
 ```bash
