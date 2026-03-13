@@ -2,9 +2,10 @@ HELP.md
 
 ### go ###
 /coverage.out
+*.exe
 
 ### Go Land ###
-.idea
+.idea/
 *.iws
 *.iml
 *.ipr
