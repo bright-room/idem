@@ -15,9 +15,10 @@ GitHub Issue の棚卸を行うスキル。対応済み Issue のクローズ、
 ## 処理の流れ
 
 1. **対応済み Issue のクローズ** — コードベースと PR を確認し、既に対応済みの Issue をクローズ
-2. **マイルストーンの平準化** — Issue がマイルストーンに偏りなく配分されているかを確認し、必要に応じて調整・新規作成
-3. **実装プランからの Issue 作成** — `.claude/outputs/plans/` が存在すれば「今後の展望」セクションから、未 Issue 化の項目を新規 Issue として作成
-4. **棚卸レポートの出力** — `.claude/outputs/triage/TRIAGE-YYYY-MM-DD-HHmmss.md` に結果を出力
+2. **既存 Issue のラベル付与** — ラベル未付与の Issue に種別・優先度ラベルを付与
+3. **マイルストーンの平準化** — マイルストーン未割り当ての Issue にマイルストーンを紐づけ、偏りがあれば調整・新規作成
+4. **実装プランからの Issue 作成** — `.claude/outputs/plans/` が存在すれば「今後の展望」セクションから、未 Issue 化の項目を新規 Issue として作成
+5. **棚卸レポートの出力** — `.claude/outputs/triage/TRIAGE-YYYY-MM-DD-HHmmss.md` に結果を出力
 
 ## マイルストーンの割り当て基準
 
