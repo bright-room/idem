@@ -2,6 +2,7 @@ package idem
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -16,12 +17,30 @@ const (
 // Config is a read-only snapshot of the middleware configuration.
 // It is passed to Validator functions so they can inspect—but not modify—the
 // settings that will be used by the middleware.
+//
+// Config is also available via Middleware.Config() for debug logging
+// and configuration inspection endpoints.
 type Config struct {
 	// KeyHeader is the HTTP header name used to retrieve the idempotency key.
-	KeyHeader string
+	KeyHeader string `json:"key_header"`
 
 	// TTL is the time-to-live for cached responses.
-	TTL time.Duration
+	TTL time.Duration `json:"ttl"`
+
+	// StorageType is the Go type name of the storage backend (e.g. "*idem.MemoryStorage").
+	StorageType string `json:"storage_type"`
+
+	// LockSupported indicates whether the storage backend implements the Locker interface.
+	LockSupported bool `json:"lock_supported"`
+
+	// MetricsEnabled indicates whether metrics callbacks are configured.
+	MetricsEnabled bool `json:"metrics_enabled"`
+
+	// OnErrorEnabled indicates whether an error callback is configured.
+	OnErrorEnabled bool `json:"on_error_enabled"`
+
+	// ValidatorCount is the number of registered validators.
+	ValidatorCount int `json:"validator_count"`
 }
 
 // Validator is a function that inspects the middleware configuration and
@@ -38,10 +57,29 @@ type config struct {
 }
 
 func (c *config) snapshot() Config {
-	return Config{
-		KeyHeader: c.keyHeader,
-		TTL:       c.ttl,
+	cfg := Config{
+		KeyHeader:      c.keyHeader,
+		TTL:            c.ttl,
+		ValidatorCount: len(c.validators),
 	}
+
+	if c.storage != nil {
+		cfg.StorageType = fmt.Sprintf("%T", c.storage)
+		_, cfg.LockSupported = c.storage.(Locker)
+	}
+
+	cfg.MetricsEnabled = c.metrics != nil
+	cfg.OnErrorEnabled = c.onError != nil
+
+	return cfg
+}
+
+// String returns a human-readable summary of the configuration.
+func (c Config) String() string {
+	return fmt.Sprintf(
+		"idem.Config{KeyHeader: %q, TTL: %v, StorageType: %s, LockSupported: %t, MetricsEnabled: %t}",
+		c.KeyHeader, c.TTL, c.StorageType, c.LockSupported, c.MetricsEnabled,
+	)
 }
 
 // defaultConfig returns a config with sensible defaults.

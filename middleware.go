@@ -11,6 +11,13 @@ type Middleware struct {
 	cfg *config
 }
 
+// Config returns a read-only snapshot of the middleware configuration.
+// This is useful for debug logging, health check endpoints, and
+// configuration inspection.
+func (m *Middleware) Config() Config {
+	return m.cfg.snapshot()
+}
+
 // Handler returns a net/http compatible middleware handler.
 func (m *Middleware) Handler() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

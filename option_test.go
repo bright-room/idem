@@ -3,6 +3,7 @@ package idem
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -296,19 +297,146 @@ func TestWithValidation(t *testing.T) {
 func TestConfig_snapshot(t *testing.T) {
 	t.Parallel()
 
-	cfg := &config{
-		keyHeader: "X-Custom-Key",
-		ttl:       10 * time.Minute,
-	}
+	t.Run("basic fields", func(t *testing.T) {
+		t.Parallel()
 
-	snap := cfg.snapshot()
+		cfg := &config{
+			keyHeader: "X-Custom-Key",
+			ttl:       10 * time.Minute,
+		}
 
-	if snap.KeyHeader != cfg.keyHeader {
-		t.Errorf("KeyHeader = %q, want %q", snap.KeyHeader, cfg.keyHeader)
-	}
-	if snap.TTL != cfg.ttl {
-		t.Errorf("TTL = %v, want %v", snap.TTL, cfg.ttl)
-	}
+		snap := cfg.snapshot()
+
+		if snap.KeyHeader != cfg.keyHeader {
+			t.Errorf("KeyHeader = %q, want %q", snap.KeyHeader, cfg.keyHeader)
+		}
+		if snap.TTL != cfg.ttl {
+			t.Errorf("TTL = %v, want %v", snap.TTL, cfg.ttl)
+		}
+	})
+
+	t.Run("StorageType is empty when storage is nil", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := defaultConfig()
+		snap := cfg.snapshot()
+
+		if snap.StorageType != "" {
+			t.Errorf("StorageType = %q, want empty", snap.StorageType)
+		}
+	})
+
+	t.Run("StorageType reflects MemoryStorage type name", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := defaultConfig()
+		cfg.storage = NewMemoryStorage()
+		snap := cfg.snapshot()
+
+		if snap.StorageType != "*idem.MemoryStorage" {
+			t.Errorf("StorageType = %q, want %q", snap.StorageType, "*idem.MemoryStorage")
+		}
+	})
+
+	t.Run("LockSupported is true when storage implements Locker", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := defaultConfig()
+		cfg.storage = NewMemoryStorage()
+		snap := cfg.snapshot()
+
+		if !snap.LockSupported {
+			t.Error("LockSupported = false, want true")
+		}
+	})
+
+	t.Run("LockSupported is false when storage does not implement Locker", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := defaultConfig()
+		cfg.storage = &stubStorage{}
+		snap := cfg.snapshot()
+
+		if snap.LockSupported {
+			t.Error("LockSupported = true, want false")
+		}
+	})
+
+	t.Run("MetricsEnabled reflects metrics presence", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := defaultConfig()
+		if cfg.snapshot().MetricsEnabled {
+			t.Error("MetricsEnabled = true without metrics, want false")
+		}
+
+		WithMetrics(Metrics{})(cfg)
+		if !cfg.snapshot().MetricsEnabled {
+			t.Error("MetricsEnabled = false with metrics, want true")
+		}
+	})
+
+	t.Run("OnErrorEnabled reflects onError presence", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := defaultConfig()
+		if cfg.snapshot().OnErrorEnabled {
+			t.Error("OnErrorEnabled = true without onError, want false")
+		}
+
+		WithOnError(func(_ error) {})(cfg)
+		if !cfg.snapshot().OnErrorEnabled {
+			t.Error("OnErrorEnabled = false with onError, want true")
+		}
+	})
+
+	t.Run("ValidatorCount reflects registered validators", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := defaultConfig()
+		if cfg.snapshot().ValidatorCount != 0 {
+			t.Errorf("ValidatorCount = %d, want 0", cfg.snapshot().ValidatorCount)
+		}
+
+		WithValidation(
+			func(_ Config) error { return nil },
+			func(_ Config) error { return nil },
+		)(cfg)
+
+		if cfg.snapshot().ValidatorCount != 2 {
+			t.Errorf("ValidatorCount = %d, want 2", cfg.snapshot().ValidatorCount)
+		}
+	})
+}
+
+func TestConfig_String(t *testing.T) {
+	t.Parallel()
+
+	t.Run("contains all key fields", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := Config{
+			KeyHeader:      "Idempotency-Key",
+			TTL:            24 * time.Hour,
+			StorageType:    "*idem.MemoryStorage",
+			LockSupported:  true,
+			MetricsEnabled: true,
+		}
+
+		s := cfg.String()
+		for _, want := range []string{"Idempotency-Key", "24h0m0s", "*idem.MemoryStorage", "true"} {
+			if !strings.Contains(s, want) {
+				t.Errorf("String() = %q, missing %q", s, want)
+			}
+		}
+	})
+
+	t.Run("does not panic on zero value", func(t *testing.T) {
+		t.Parallel()
+
+		var cfg Config
+		_ = cfg.String()
+	})
 }
 
 func TestNew_withCustomValidation(t *testing.T) {
