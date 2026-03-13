@@ -631,6 +631,86 @@ func TestMiddleware_Handler(t *testing.T) {
 	})
 }
 
+func TestMiddleware_Config(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns defaults with no options", func(t *testing.T) {
+		t.Parallel()
+
+		mw := newTestMiddleware(t)
+		cfg := mw.Config()
+
+		if cfg.KeyHeader != DefaultKeyHeader {
+			t.Errorf("KeyHeader = %q, want %q", cfg.KeyHeader, DefaultKeyHeader)
+		}
+		if cfg.TTL != DefaultTTL {
+			t.Errorf("TTL = %v, want %v", cfg.TTL, DefaultTTL)
+		}
+		if cfg.StorageType != "*idem.MemoryStorage" {
+			t.Errorf("StorageType = %q, want %q", cfg.StorageType, "*idem.MemoryStorage")
+		}
+		if !cfg.LockSupported {
+			t.Error("LockSupported = false, want true")
+		}
+		if cfg.MetricsEnabled {
+			t.Error("MetricsEnabled = true, want false")
+		}
+		if cfg.OnErrorEnabled {
+			t.Error("OnErrorEnabled = true, want false")
+		}
+		if cfg.ValidatorCount != 0 {
+			t.Errorf("ValidatorCount = %d, want 0", cfg.ValidatorCount)
+		}
+	})
+
+	t.Run("reflects custom options", func(t *testing.T) {
+		t.Parallel()
+
+		mw := newTestMiddleware(t,
+			WithKeyHeader("X-Request-Id"),
+			WithTTL(5*time.Minute),
+			WithStorage(&stubStorage{}),
+			WithOnError(func(_ error) {}),
+			WithMetrics(Metrics{}),
+			WithValidation(func(_ Config) error { return nil }),
+		)
+		cfg := mw.Config()
+
+		if cfg.KeyHeader != "X-Request-Id" {
+			t.Errorf("KeyHeader = %q, want %q", cfg.KeyHeader, "X-Request-Id")
+		}
+		if cfg.TTL != 5*time.Minute {
+			t.Errorf("TTL = %v, want %v", cfg.TTL, 5*time.Minute)
+		}
+		if cfg.StorageType != "*idem.stubStorage" {
+			t.Errorf("StorageType = %q, want %q", cfg.StorageType, "*idem.stubStorage")
+		}
+		if cfg.LockSupported {
+			t.Error("LockSupported = true, want false")
+		}
+		if !cfg.MetricsEnabled {
+			t.Error("MetricsEnabled = false, want true")
+		}
+		if !cfg.OnErrorEnabled {
+			t.Error("OnErrorEnabled = false, want true")
+		}
+		if cfg.ValidatorCount != 1 {
+			t.Errorf("ValidatorCount = %d, want 1", cfg.ValidatorCount)
+		}
+	})
+
+	t.Run("LockSupported reflects Locker implementation", func(t *testing.T) {
+		t.Parallel()
+
+		mw := newTestMiddleware(t, WithStorage(&spyLockerStorage{}))
+		cfg := mw.Config()
+
+		if !cfg.LockSupported {
+			t.Error("LockSupported = false, want true for Locker-implementing storage")
+		}
+	})
+}
+
 func TestNewResponseRecorder(t *testing.T) {
 	t.Parallel()
 

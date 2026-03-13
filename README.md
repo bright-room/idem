@@ -148,6 +148,28 @@ mw, err := idem.New(
 
 All callback fields are optional — nil callbacks are never invoked and add no overhead. Lock contention (409 Conflict) is reported exclusively via `OnLockContention` and does not trigger `OnError`. Requests without an idempotency key bypass the middleware entirely and do not trigger any metrics callbacks.
 
+### Configuration Inspection
+
+Use `Middleware.Config()` to retrieve a read-only snapshot of the current configuration. This is useful for debug logging and configuration inspection endpoints.
+
+```go
+mw, _ := idem.New(
+	idem.WithTTL(1 * time.Hour),
+	idem.WithStorage(redisStore),
+)
+
+// Debug logging
+log.Printf("idem config: %s", mw.Config())
+
+// JSON endpoint
+http.HandleFunc("/debug/idem/config", func(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(mw.Config())
+})
+```
+
+The `Config` struct includes JSON tags and implements `fmt.Stringer` for convenient serialization.
+
 ## How It Works
 
 ```
