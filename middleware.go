@@ -1,8 +1,9 @@
 package idem
 
+//go:generate go run ./internal/cmd/genrecorder
+
 import (
 	"bytes"
-	"io"
 	"net/http"
 )
 
@@ -97,87 +98,6 @@ type responseRecorder struct {
 	statusCode int
 	body       bytes.Buffer
 	written    bool
-}
-
-// responseRecorderFlusher delegates http.Flusher to the underlying ResponseWriter.
-type responseRecorderFlusher struct {
-	*responseRecorder
-	http.Flusher
-}
-
-// responseRecorderHijacker delegates http.Hijacker to the underlying ResponseWriter.
-type responseRecorderHijacker struct {
-	*responseRecorder
-	http.Hijacker
-}
-
-// responseRecorderFlusherHijacker delegates both http.Flusher and http.Hijacker
-// to the underlying ResponseWriter.
-type responseRecorderFlusherHijacker struct {
-	*responseRecorder
-	http.Flusher
-	http.Hijacker
-}
-
-// responseRecorderReaderFrom delegates io.ReaderFrom to the underlying ResponseWriter.
-type responseRecorderReaderFrom struct {
-	*responseRecorder
-	io.ReaderFrom
-}
-
-// responseRecorderFlusherReaderFrom delegates both http.Flusher and io.ReaderFrom
-// to the underlying ResponseWriter.
-type responseRecorderFlusherReaderFrom struct {
-	*responseRecorder
-	http.Flusher
-	io.ReaderFrom
-}
-
-// responseRecorderHijackerReaderFrom delegates both http.Hijacker and io.ReaderFrom
-// to the underlying ResponseWriter.
-type responseRecorderHijackerReaderFrom struct {
-	*responseRecorder
-	http.Hijacker
-	io.ReaderFrom
-}
-
-// responseRecorderFlusherHijackerReaderFrom delegates http.Flusher, http.Hijacker,
-// and io.ReaderFrom to the underlying ResponseWriter.
-type responseRecorderFlusherHijackerReaderFrom struct {
-	*responseRecorder
-	http.Flusher
-	http.Hijacker
-	io.ReaderFrom
-}
-
-func newResponseRecorder(w http.ResponseWriter) http.ResponseWriter {
-	rec := &responseRecorder{
-		ResponseWriter: w,
-		statusCode:     http.StatusOK,
-	}
-
-	flusher, canFlush := w.(http.Flusher)
-	hijacker, canHijack := w.(http.Hijacker)
-	readerFrom, canReadFrom := w.(io.ReaderFrom)
-
-	switch {
-	case canFlush && canHijack && canReadFrom:
-		return &responseRecorderFlusherHijackerReaderFrom{rec, flusher, hijacker, readerFrom}
-	case canFlush && canHijack:
-		return &responseRecorderFlusherHijacker{rec, flusher, hijacker}
-	case canFlush && canReadFrom:
-		return &responseRecorderFlusherReaderFrom{rec, flusher, readerFrom}
-	case canHijack && canReadFrom:
-		return &responseRecorderHijackerReaderFrom{rec, hijacker, readerFrom}
-	case canFlush:
-		return &responseRecorderFlusher{rec, flusher}
-	case canHijack:
-		return &responseRecorderHijacker{rec, hijacker}
-	case canReadFrom:
-		return &responseRecorderReaderFrom{rec, readerFrom}
-	default:
-		return rec
-	}
 }
 
 func (r *responseRecorder) WriteHeader(code int) {
