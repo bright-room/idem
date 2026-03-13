@@ -9,9 +9,12 @@ services:
     depends_on:
       - redis
       - redis-cluster-init
+      - redis-sentinel-init
     environment:
       REDIS_ADDR: redis:6379
       REDIS_CLUSTER_ADDRS: "redis-cluster-node-1:7000,redis-cluster-node-2:7001,redis-cluster-node-3:7002"
+      REDIS_SENTINEL_ADDRS: "redis-sentinel-1:26379,redis-sentinel-2:26380,redis-sentinel-3:26381"
+      REDIS_SENTINEL_MASTER: "mymaster"
 
   redis:
     image: redis:8-alpine
@@ -65,6 +68,96 @@ services:
           redis-cluster-node-2:7001 \
           redis-cluster-node-3:7002 \
           --cluster-replicas 0 --cluster-yes
+
+  redis-sentinel-master:
+    image: redis:8-alpine
+    command: >
+      redis-server
+      --port 6380
+      --bind 0.0.0.0
+
+  redis-sentinel-replica:
+    image: redis:8-alpine
+    command: >
+      redis-server
+      --port 6381
+      --bind 0.0.0.0
+      --replicaof redis-sentinel-master 6380
+    depends_on:
+      - redis-sentinel-master
+
+  redis-sentinel-1:
+    image: redis:8-alpine
+    depends_on:
+      - redis-sentinel-master
+      - redis-sentinel-replica
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat <<EOF > /tmp/sentinel.conf
+        port 26379
+        sentinel monitor mymaster redis-sentinel-master 6380 2
+        sentinel down-after-milliseconds mymaster 5000
+        sentinel failover-timeout mymaster 10000
+        sentinel parallel-syncs mymaster 1
+        EOF
+        redis-server /tmp/sentinel.conf --sentinel
+
+  redis-sentinel-2:
+    image: redis:8-alpine
+    depends_on:
+      - redis-sentinel-master
+      - redis-sentinel-replica
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat <<EOF > /tmp/sentinel.conf
+        port 26380
+        sentinel monitor mymaster redis-sentinel-master 6380 2
+        sentinel down-after-milliseconds mymaster 5000
+        sentinel failover-timeout mymaster 10000
+        sentinel parallel-syncs mymaster 1
+        EOF
+        redis-server /tmp/sentinel.conf --sentinel
+
+  redis-sentinel-3:
+    image: redis:8-alpine
+    depends_on:
+      - redis-sentinel-master
+      - redis-sentinel-replica
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat <<EOF > /tmp/sentinel.conf
+        port 26381
+        sentinel monitor mymaster redis-sentinel-master 6380 2
+        sentinel down-after-milliseconds mymaster 5000
+        sentinel failover-timeout mymaster 10000
+        sentinel parallel-syncs mymaster 1
+        EOF
+        redis-server /tmp/sentinel.conf --sentinel
+
+  redis-sentinel-init:
+    image: redis:8-alpine
+    depends_on:
+      - redis-sentinel-1
+      - redis-sentinel-2
+      - redis-sentinel-3
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sleep 3
+        for i in $(seq 1 30); do
+          MASTER=$(redis-cli -h redis-sentinel-1 -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null)
+          if [ -n "$MASTER" ]; then
+            echo "Sentinel ready: master=$MASTER"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "Sentinel init timeout"
+        exit 1
 
 volumes:
   go-mod-cache:

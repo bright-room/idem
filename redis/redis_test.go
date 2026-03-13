@@ -53,6 +53,32 @@ func newTestClusterClient(t *testing.T) goredis.Cmdable {
 	return client
 }
 
+func newTestSentinelClient(t *testing.T) goredis.Cmdable {
+	t.Helper()
+
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	addrs := os.Getenv("REDIS_SENTINEL_ADDRS")
+	if addrs == "" {
+		t.Skip("REDIS_SENTINEL_ADDRS not set, skipping sentinel test")
+	}
+
+	masterName := os.Getenv("REDIS_SENTINEL_MASTER")
+	if masterName == "" {
+		masterName = "mymaster"
+	}
+
+	client := goredis.NewFailoverClient(&goredis.FailoverOptions{
+		MasterName:    masterName,
+		SentinelAddrs: strings.Split(addrs, ","),
+	})
+	t.Cleanup(func() { _ = client.Close() })
+
+	return client
+}
+
 func newTestStorage(t *testing.T, client goredis.Cmdable, opts ...iredis.Option) *iredis.Storage {
 	t.Helper()
 
@@ -365,6 +391,10 @@ func TestIntegration_Storage(t *testing.T) {
 
 func TestIntegration_ClusterStorage(t *testing.T) {
 	runStorageTests(t, "ClusterStorage", newTestClusterClient)
+}
+
+func TestIntegration_SentinelStorage(t *testing.T) {
+	runStorageTests(t, "SentinelStorage", newTestSentinelClient)
 }
 
 // --- Standalone-only integration tests ---

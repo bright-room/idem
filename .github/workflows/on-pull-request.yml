@@ -97,6 +97,51 @@ jobs:
             127.0.0.1:7000 127.0.0.1:7001 127.0.0.1:7002 \
             --cluster-replicas 0 --cluster-yes
 
+      - name: Start Redis Sentinel
+        run: |
+          # Start master
+          docker run -d --name redis-sentinel-master --network host \
+            redis:8-alpine redis-server --port 6380 --bind 0.0.0.0
+
+          # Start replica
+          docker run -d --name redis-sentinel-replica --network host \
+            redis:8-alpine redis-server --port 6381 --bind 0.0.0.0 \
+            --replicaof 127.0.0.1 6380
+
+          # Wait for master and replica
+          for port in 6380 6381; do
+            for i in $(seq 1 30); do
+              if docker exec redis-sentinel-master redis-cli -p $port ping 2>/dev/null | grep -q PONG; then
+                break
+              fi
+              sleep 1
+            done
+          done
+
+          # Start 3 sentinels
+          for port in 26379 26380 26381; do
+            docker run -d --name redis-sentinel-$port --network host \
+              redis:8-alpine sh -c "
+                cat <<CONF > /tmp/sentinel.conf
+          port $port
+          sentinel monitor mymaster 127.0.0.1 6380 2
+          sentinel down-after-milliseconds mymaster 5000
+          sentinel failover-timeout mymaster 10000
+          sentinel parallel-syncs mymaster 1
+          CONF
+                redis-server /tmp/sentinel.conf --sentinel"
+          done
+
+          # Wait for sentinels to discover master
+          for i in $(seq 1 30); do
+            MASTER=$(docker exec redis-sentinel-26379 redis-cli -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -1)
+            if [ -n "$MASTER" ]; then
+              echo "Sentinel ready: master=$MASTER"
+              break
+            fi
+            sleep 1
+          done
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -107,6 +152,8 @@ jobs:
       - name: Run integration tests
         env:
           REDIS_CLUSTER_ADDRS: "localhost:7000,localhost:7001,localhost:7002"
+          REDIS_SENTINEL_ADDRS: "localhost:26379,localhost:26380,localhost:26381"
+          REDIS_SENTINEL_MASTER: "mymaster"
         run: |
           gotestsum \
             --junitfile integration-test-report.xml \
