@@ -3,7 +3,7 @@ module github.com/bright-room/idem/_examples/nginx-redis-gin
 go 1.25.5
 
 require (
-	github.com/bright-room/idem v0.2.0
+	github.com/bright-room/idem v0.7.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/redis/go-redis/v9 v9.18.0
 )

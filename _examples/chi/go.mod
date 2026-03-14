@@ -3,7 +3,7 @@ module github.com/bright-room/idem/_examples/chi
 go 1.25.5
 
 require (
-	github.com/bright-room/idem v0.2.0
+	github.com/bright-room/idem v0.7.0
 	github.com/go-chi/chi/v5 v5.2.5
 )
 
