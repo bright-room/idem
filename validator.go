@@ -1,6 +1,7 @@
 package idem
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"time"
@@ -30,6 +31,9 @@ func MinTTL(limit time.Duration) Validator {
 // name to match the given regular expression pattern.
 func KeyHeaderPattern(pattern *regexp.Regexp) Validator {
 	return func(cfg Config) error {
+		if pattern == nil {
+			return errors.New("idem: key header pattern must not be nil")
+		}
 		if !pattern.MatchString(cfg.KeyHeader) {
 			return fmt.Errorf("idem: key header %q does not match pattern %s", cfg.KeyHeader, pattern)
 		}

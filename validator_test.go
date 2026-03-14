@@ -111,6 +111,11 @@ func TestKeyHeaderPattern(t *testing.T) {
 			keyHeader: "Idempotency-Key",
 			wantErr:   true,
 		},
+		{
+			name:    "nil pattern returns error",
+			pattern: nil,
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -225,6 +230,17 @@ func TestNew_withPresetValidators(t *testing.T) {
 		_, err := New(
 			WithKeyHeader("X-Custom"),
 			WithValidation(AllowedKeyHeaders("Idempotency-Key", "X-Request-Id")),
+		)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("returns error when KeyHeaderPattern receives nil pattern", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := New(
+			WithValidation(KeyHeaderPattern(nil)),
 		)
 		if err == nil {
 			t.Fatal("expected error, got nil")
