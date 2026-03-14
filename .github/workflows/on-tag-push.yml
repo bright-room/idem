@@ -1,0 +1,47 @@
+name: on-tag-push
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  request-index:
+    name: Index on pkg.go.dev
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Index on pkg.go.dev
+        run: |
+          MODULE=$(go list -m)
+          VERSION="${GITHUB_REF_NAME}"
+          echo "Requesting index for ${MODULE}@${VERSION}"
+          GOPROXY=https://proxy.golang.org go list -m "${MODULE}@${VERSION}"
+
+  release:
+    name: GitHub Release
+    needs: request-index
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes
