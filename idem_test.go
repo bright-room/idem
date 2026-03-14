@@ -189,7 +189,11 @@ func TestMemoryStorage_WithCleanupInterval(t *testing.T) {
 		t.Parallel()
 
 		s := NewMemoryStorage(WithCleanupInterval(10 * time.Millisecond))
-		defer s.Close()
+		defer func() {
+			if err := s.Close(); err != nil {
+				t.Errorf("Close() error = %v", err)
+			}
+		}()
 
 		ctx := context.Background()
 		res := &Response{StatusCode: http.StatusOK, Body: []byte("data")}
@@ -257,7 +261,11 @@ func TestMemoryStorage_WithCleanupInterval(t *testing.T) {
 		t.Parallel()
 
 		s := NewMemoryStorage(WithCleanupInterval(0))
-		defer s.Close()
+		defer func() {
+			if err := s.Close(); err != nil {
+				t.Errorf("Close() error = %v", err)
+			}
+		}()
 
 		ctx := context.Background()
 		res := &Response{StatusCode: http.StatusOK, Body: []byte("data")}
