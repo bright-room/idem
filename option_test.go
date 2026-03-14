@@ -121,14 +121,14 @@ func TestWithOnError(t *testing.T) {
 	cfg := defaultConfig()
 
 	called := false
-	fn := func(_ error) { called = true }
+	fn := func(_ string, _ error) { called = true }
 	WithOnError(fn)(cfg)
 
 	if cfg.onError == nil {
 		t.Fatal("onError = nil, want non-nil")
 	}
 
-	cfg.onError(nil)
+	cfg.onError("test-key", nil)
 
 	if !called {
 		t.Error("callback was not called")
@@ -384,7 +384,7 @@ func TestConfig_snapshot(t *testing.T) {
 			t.Error("OnErrorEnabled = true without onError, want false")
 		}
 
-		WithOnError(func(_ error) {})(cfg)
+		WithOnError(func(_ string, _ error) {})(cfg)
 		if !cfg.snapshot().OnErrorEnabled {
 			t.Error("OnErrorEnabled = false with onError, want true")
 		}

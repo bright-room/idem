@@ -63,7 +63,7 @@ The first request executes the handler and caches the response. Subsequent reque
 | `WithKeyHeader(h)` | `"Idempotency-Key"` | Header name to read the idempotency key from |
 | `WithTTL(d)` | `24h` | Cache duration for stored responses |
 | `WithStorage(s)` | In-memory | Storage backend for cached responses |
-| `WithOnError(fn)` | `nil` | Callback invoked when a storage operation fails |
+| `WithOnError(fn)` | `nil` | Callback invoked when a storage operation fails (receives key and error) |
 | `WithMetrics(m)` | `nil` | Callbacks for observing cache hits, misses, and errors |
 | `WithValidation(v...)` | none | Custom validators run during `New()` after built-in checks |
 
@@ -72,8 +72,8 @@ mw, err := idem.New(
 	idem.WithKeyHeader("X-Request-Id"),
 	idem.WithTTL(1 * time.Hour),
 	idem.WithStorage(redisStore),
-	idem.WithOnError(func(err error) {
-		log.Printf("storage error: %v", err)
+	idem.WithOnError(func(key string, err error) {
+		log.Printf("storage error: key=%s err=%v", key, err)
 	}),
 )
 if err != nil {

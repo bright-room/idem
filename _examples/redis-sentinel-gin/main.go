@@ -44,8 +44,8 @@ func main() {
 
 	idempotency, err := idem.New(
 		idem.WithStorage(store),
-		idem.WithOnError(func(err error) {
-			log.Printf("[idem] error: %v", err)
+		idem.WithOnError(func(key string, err error) {
+			log.Printf("[idem] error: key=%s err=%v", key, err)
 		}),
 	)
 	if err != nil {

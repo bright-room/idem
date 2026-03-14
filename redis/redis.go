@@ -105,6 +105,13 @@ func (s *Storage) Get(ctx context.Context, key string) (*idem.Response, error) {
 		return nil, err
 	}
 
+	// StatusCode 0 is not a valid HTTP status. This guards against
+	// corrupt or legacy cache entries (e.g. serialized without JSON
+	// tags) where all fields decode to zero values.
+	if res.StatusCode == 0 {
+		return nil, nil
+	}
+
 	return &res, nil
 }
 
