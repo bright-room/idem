@@ -256,20 +256,30 @@ func mockFieldName(ifaceName string) string {
 	}
 }
 
-func renderToFile(filename string, tmplText string, data any) error {
+// renderToBytes executes the template with the given data and returns gofmt-formatted source.
+func renderToBytes(tmplText string, data any) ([]byte, error) {
 	tmpl, err := template.New("gen").Parse(tmplText)
 	if err != nil {
-		return fmt.Errorf("parse template: %w", err)
+		return nil, fmt.Errorf("parse template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return fmt.Errorf("execute template: %w", err)
+		return nil, fmt.Errorf("execute template: %w", err)
 	}
 
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
-		return fmt.Errorf("gofmt %s: %w\n\nGenerated code:\n%s", filename, err, buf.String())
+		return nil, fmt.Errorf("gofmt: %w\n\nGenerated code:\n%s", err, buf.String())
+	}
+
+	return formatted, nil
+}
+
+func renderToFile(filename string, tmplText string, data any) error {
+	formatted, err := renderToBytes(tmplText, data)
+	if err != nil {
+		return fmt.Errorf("%s: %w", filename, err)
 	}
 
 	return os.WriteFile(filename, formatted, 0o644)
