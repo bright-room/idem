@@ -112,7 +112,7 @@ func runStorageTests(t *testing.T, name string, factory clientFactory) {
 
 			want := &idem.Response{
 				StatusCode: http.StatusOK,
-				Header:     map[string][]string{"Content-Type": {"application/json"}},
+				Header:     http.Header{"Content-Type": {"application/json"}},
 				Body:       []byte(`{"ok":true}`),
 			}
 
@@ -130,9 +130,9 @@ func runStorageTests(t *testing.T, name string, factory clientFactory) {
 			if got.StatusCode != want.StatusCode {
 				t.Errorf("StatusCode = %d, want %d", got.StatusCode, want.StatusCode)
 			}
-			if http.Header(got.Header).Get("Content-Type") != http.Header(want.Header).Get("Content-Type") {
+			if got.Header.Get("Content-Type") != want.Header.Get("Content-Type") {
 				t.Errorf("Header Content-Type = %q, want %q",
-					http.Header(got.Header).Get("Content-Type"), http.Header(want.Header).Get("Content-Type"))
+					got.Header.Get("Content-Type"), want.Header.Get("Content-Type"))
 			}
 			if string(got.Body) != string(want.Body) {
 				t.Errorf("Body = %q, want %q", got.Body, want.Body)
@@ -190,7 +190,7 @@ func runStorageTests(t *testing.T, name string, factory clientFactory) {
 
 			res := &idem.Response{
 				StatusCode: http.StatusOK,
-				Header:     map[string][]string{"Content-Type": {"application/json"}},
+				Header:     http.Header{"Content-Type": {"application/json"}},
 				Body:       []byte(`{"ok":true}`),
 			}
 

@@ -1,8 +1,10 @@
 package idem
 
+import "net/http"
+
 // Response represents a cached HTTP response.
 type Response struct {
-	StatusCode int
-	Header     map[string][]string
-	Body       []byte
+	StatusCode int         `json:"status_code"`
+	Header     http.Header `json:"header"`
+	Body       []byte      `json:"body"`
 }

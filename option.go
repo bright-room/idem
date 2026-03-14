@@ -27,6 +27,10 @@ type Config struct {
 	// TTL is the time-to-live for cached responses.
 	TTL time.Duration `json:"ttl"`
 
+	// KeyMaxLength is the maximum allowed length for idempotency key values.
+	// A value of 0 means no length limit.
+	KeyMaxLength int `json:"key_max_length"`
+
 	// StorageType is the Go type name of the storage backend (e.g. "*idem.MemoryStorage").
 	StorageType string `json:"storage_type"`
 
@@ -52,7 +56,7 @@ type config struct {
 	ttl          time.Duration
 	keyMaxLength int
 	storage      Storage
-	onError      func(error)
+	onError      func(key string, err error)
 	metrics      *Metrics
 	validators   []Validator
 }
@@ -61,6 +65,7 @@ func (c *config) snapshot() Config {
 	cfg := Config{
 		KeyHeader:      c.keyHeader,
 		TTL:            c.ttl,
+		KeyMaxLength:   c.keyMaxLength,
 		ValidatorCount: len(c.validators),
 	}
 
@@ -78,8 +83,8 @@ func (c *config) snapshot() Config {
 // String returns a human-readable summary of the configuration.
 func (c Config) String() string {
 	return fmt.Sprintf(
-		"idem.Config{KeyHeader: %q, TTL: %v, StorageType: %s, LockSupported: %t, MetricsEnabled: %t}",
-		c.KeyHeader, c.TTL, c.StorageType, c.LockSupported, c.MetricsEnabled,
+		"idem.Config{KeyHeader: %q, TTL: %v, KeyMaxLength: %d, StorageType: %s, LockSupported: %t, MetricsEnabled: %t}",
+		c.KeyHeader, c.TTL, c.KeyMaxLength, c.StorageType, c.LockSupported, c.MetricsEnabled,
 	)
 }
 
@@ -117,8 +122,10 @@ func WithStorage(s Storage) Option {
 	}
 }
 
-// WithOnError specifies a callback function that is called when a storage operation fails.
-func WithOnError(fn func(error)) Option {
+// WithOnError specifies a callback function that is called when a storage
+// operation (Get or Set) fails. The key is the idempotency key from the request.
+// Lock contention is not reported here; use Metrics.OnLockContention instead.
+func WithOnError(fn func(key string, err error)) Option {
 	return func(c *config) {
 		c.onError = fn
 	}

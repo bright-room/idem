@@ -224,18 +224,26 @@ func TestMiddleware_Handler(t *testing.T) {
 		t.Parallel()
 
 		getErr := errors.New("get failed")
+		var gotKey string
 		var gotErr error
 		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
 
 		store := &errorStorage{getErr: getErr}
-		mw := newTestMiddleware(t, WithStorage(store), WithOnError(func(err error) { gotErr = err }))
+		mw := newTestMiddleware(t, WithStorage(store), WithOnError(func(key string, err error) {
+			gotKey = key
+			gotErr = err
+		}))
 		wrapped := mw.Handler()(handler)
 
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
 		req.Header.Set("Idempotency-Key", "err-key")
 		wrapped.ServeHTTP(httptest.NewRecorder(), req)
+
+		if gotKey != "err-key" {
+			t.Errorf("onError key = %q, want %q", gotKey, "err-key")
+		}
 
 		if !errors.Is(gotErr, getErr) {
 			t.Errorf("onError received %v, want %v", gotErr, getErr)
@@ -246,19 +254,27 @@ func TestMiddleware_Handler(t *testing.T) {
 		t.Parallel()
 
 		setErr := errors.New("set failed")
+		var gotKey string
 		var gotErr error
 		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
 
 		store := &errorStorage{setErr: setErr}
-		mw := newTestMiddleware(t, WithStorage(store), WithOnError(func(err error) { gotErr = err }))
+		mw := newTestMiddleware(t, WithStorage(store), WithOnError(func(key string, err error) {
+			gotKey = key
+			gotErr = err
+		}))
 		wrapped := mw.Handler()(handler)
 
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
 		req.Header.Set("Idempotency-Key", "err-key")
 		rec := httptest.NewRecorder()
 		wrapped.ServeHTTP(rec, req)
+
+		if gotKey != "err-key" {
+			t.Errorf("onError key = %q, want %q", gotKey, "err-key")
+		}
 
 		if !errors.Is(gotErr, setErr) {
 			t.Errorf("onError received %v, want %v", gotErr, setErr)
@@ -321,25 +337,25 @@ func TestMiddleware_Handler(t *testing.T) {
 		}
 	})
 
-	t.Run("calls onError callback when lock acquisition fails", func(t *testing.T) {
+	t.Run("does not call onError callback when lock acquisition fails", func(t *testing.T) {
 		t.Parallel()
 
 		lockErr := errors.New("lock failed")
-		var gotErr error
+		var onErrorCalled bool
 		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
 
 		store := &errorLockerStorage{lockErr: lockErr}
-		mw := newTestMiddleware(t, WithStorage(store), WithOnError(func(err error) { gotErr = err }))
+		mw := newTestMiddleware(t, WithStorage(store), WithOnError(func(_ string, _ error) { onErrorCalled = true }))
 		wrapped := mw.Handler()(handler)
 
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
 		req.Header.Set("Idempotency-Key", "err-lock-key")
 		wrapped.ServeHTTP(httptest.NewRecorder(), req)
 
-		if !errors.Is(gotErr, lockErr) {
-			t.Errorf("onError received %v, want %v", gotErr, lockErr)
+		if onErrorCalled {
+			t.Error("WithOnError callback was called on lock contention, want not called")
 		}
 	})
 
@@ -536,7 +552,7 @@ func TestMiddleware_Handler(t *testing.T) {
 		store := &errorStorage{getErr: getErr}
 		mw := newTestMiddleware(t,
 			WithStorage(store),
-			WithOnError(func(_ error) { onErrorCalled = true }),
+			WithOnError(func(_ string, _ error) { onErrorCalled = true }),
 			WithMetrics(Metrics{
 				OnError: func(_ string, _ error) { metricsErrorCalled = true },
 			}),
@@ -669,7 +685,7 @@ func TestMiddleware_Config(t *testing.T) {
 			WithKeyHeader("X-Request-Id"),
 			WithTTL(5*time.Minute),
 			WithStorage(&stubStorage{}),
-			WithOnError(func(_ error) {}),
+			WithOnError(func(_ string, _ error) {}),
 			WithMetrics(Metrics{}),
 			WithValidation(func(_ Config) error { return nil }),
 		)

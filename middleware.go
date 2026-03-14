@@ -37,9 +37,6 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 			if locker, ok := m.cfg.storage.(Locker); ok {
 				unlock, err := locker.Lock(r.Context(), key, m.cfg.ttl)
 				if err != nil {
-					if m.cfg.onError != nil {
-						m.cfg.onError(err)
-					}
 					if m.cfg.metrics != nil && m.cfg.metrics.OnLockContention != nil {
 						m.cfg.metrics.OnLockContention(key, err)
 					}
@@ -52,7 +49,7 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 			cached, err := m.cfg.storage.Get(r.Context(), key)
 			if err != nil {
 				if m.cfg.onError != nil {
-					m.cfg.onError(err)
+					m.cfg.onError(key, err)
 				}
 				if m.cfg.metrics != nil && m.cfg.metrics.OnError != nil {
 					m.cfg.metrics.OnError(key, err)
@@ -80,7 +77,7 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 			res := rr.toResponse()
 			if err := m.cfg.storage.Set(r.Context(), key, res, m.cfg.ttl); err != nil {
 				if m.cfg.onError != nil {
-					m.cfg.onError(err)
+					m.cfg.onError(key, err)
 				}
 				if m.cfg.metrics != nil && m.cfg.metrics.OnError != nil {
 					m.cfg.metrics.OnError(key, err)
@@ -122,7 +119,7 @@ func (r *responseRecorder) Write(b []byte) (int, error) {
 }
 
 func (r *responseRecorder) toResponse() *Response {
-	header := make(map[string][]string)
+	header := make(http.Header)
 	for k, v := range r.Header() {
 		header[k] = append([]string(nil), v...)
 	}
