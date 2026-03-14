@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/bright-room/idem v0.7.0
-	github.com/labstack/echo/v4 v4.15.1
+	github.com/labstack/echo/v5 v5.0.4
 	github.com/labstack/echo/v5 v5.0.4
 )
 
