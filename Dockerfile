@@ -1,6 +1,6 @@
 FROM golangci/golangci-lint:v2.11.3 AS golangci-lint
 
-FROM golang:1.25.5
+FROM golang:1.25.8
 
 COPY --from=golangci-lint /usr/bin/golangci-lint /usr/bin/golangci-lint
 
