@@ -207,6 +207,21 @@ Used automatically when no storage is specified. Suitable for development, testi
 mw, err := idem.New() // uses in-memory storage
 ```
 
+To prevent memory growth from expired entries, enable periodic background cleanup with `WithCleanupInterval`:
+
+```go
+store := idem.NewMemoryStorage(
+	idem.WithCleanupInterval(5 * time.Minute),
+)
+mw, err := idem.New(idem.WithStorage(store))
+```
+
+When using `WithCleanupInterval`, call `Close()` to stop the background goroutine when the storage is no longer needed:
+
+```go
+defer store.Close()
+```
+
 ### Redis
 
 For multi-instance deployments where idempotency state must be shared across processes. The `idem/redis` package accepts `goredis.Cmdable`, so it works with standalone, cluster, and sentinel (failover) clients.

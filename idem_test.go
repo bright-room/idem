@@ -182,6 +182,103 @@ func TestMemoryStorage_Get(t *testing.T) {
 	}
 }
 
+func TestMemoryStorage_WithCleanupInterval(t *testing.T) {
+	t.Parallel()
+
+	t.Run("removes expired entries in background", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewMemoryStorage(WithCleanupInterval(10 * time.Millisecond))
+		defer s.Close()
+
+		ctx := context.Background()
+		res := &Response{StatusCode: http.StatusOK, Body: []byte("data")}
+
+		if err := s.Set(ctx, "key-1", res, 20*time.Millisecond); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		// Wait for the entry to expire and cleanup to run
+		time.Sleep(50 * time.Millisecond)
+
+		s.mu.RLock()
+		_, exists := s.entries["key-1"]
+		s.mu.RUnlock()
+
+		if exists {
+			t.Error("expected expired entry to be removed by background cleanup")
+		}
+	})
+
+	t.Run("Close stops cleanup goroutine", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewMemoryStorage(WithCleanupInterval(10 * time.Millisecond))
+		ctx := context.Background()
+		res := &Response{StatusCode: http.StatusOK, Body: []byte("data")}
+
+		if err := s.Close(); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+
+		// Add entry after Close
+		if err := s.Set(ctx, "key-after-close", res, time.Nanosecond); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		// Wait long enough for cleanup to have run if it were active
+		time.Sleep(50 * time.Millisecond)
+
+		// Expired entry should remain because cleanup is stopped
+		s.mu.RLock()
+		_, exists := s.entries["key-after-close"]
+		s.mu.RUnlock()
+
+		if !exists {
+			t.Error("expected expired entry to remain after Close (cleanup should be stopped)")
+		}
+	})
+
+	t.Run("Close is idempotent", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewMemoryStorage(WithCleanupInterval(time.Minute))
+
+		if err := s.Close(); err != nil {
+			t.Fatalf("first Close() error = %v", err)
+		}
+
+		if err := s.Close(); err != nil {
+			t.Fatalf("second Close() error = %v", err)
+		}
+	})
+
+	t.Run("zero interval does not start cleanup", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewMemoryStorage(WithCleanupInterval(0))
+		defer s.Close()
+
+		ctx := context.Background()
+		res := &Response{StatusCode: http.StatusOK, Body: []byte("data")}
+
+		if err := s.Set(ctx, "key-1", res, time.Nanosecond); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		time.Sleep(50 * time.Millisecond)
+
+		// Cleanup goroutine should not have started, so expired entry remains
+		s.mu.RLock()
+		_, exists := s.entries["key-1"]
+		s.mu.RUnlock()
+
+		if !exists {
+			t.Error("expected expired entry to remain when cleanup interval is zero")
+		}
+	})
+}
+
 func TestMemoryStorage_Delete(t *testing.T) {
 	t.Parallel()
 
