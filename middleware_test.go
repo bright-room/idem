@@ -601,6 +601,110 @@ func TestMiddleware_Handler(t *testing.T) {
 		wrapped.ServeHTTP(httptest.NewRecorder(), req2)
 	})
 
+	t.Run("returns 400 Bad Request when key exceeds WithKeyMaxLength", func(t *testing.T) {
+		t.Parallel()
+
+		called := false
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusOK)
+		})
+
+		mw := newTestMiddleware(t, WithKeyMaxLength(10))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "12345678901") // 11 chars > 10
+		rec := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec, req)
+
+		if called {
+			t.Error("handler was called, want not called")
+		}
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("allows key with length equal to WithKeyMaxLength", func(t *testing.T) {
+		t.Parallel()
+
+		called := false
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusOK)
+		})
+
+		mw := newTestMiddleware(t, WithKeyMaxLength(10))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "1234567890") // exactly 10 chars
+		rec := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec, req)
+
+		if !called {
+			t.Error("handler was not called")
+		}
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+	})
+
+	t.Run("allows key shorter than WithKeyMaxLength", func(t *testing.T) {
+		t.Parallel()
+
+		called := false
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusOK)
+		})
+
+		mw := newTestMiddleware(t, WithKeyMaxLength(10))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "short") // 5 chars < 10
+		rec := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec, req)
+
+		if !called {
+			t.Error("handler was not called")
+		}
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+	})
+
+	t.Run("disables key length check when WithKeyMaxLength is 0", func(t *testing.T) {
+		t.Parallel()
+
+		called := false
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusOK)
+		})
+
+		mw := newTestMiddleware(t, WithKeyMaxLength(0))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", strings.Repeat("a", 1000)) // very long key
+		rec := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec, req)
+
+		if !called {
+			t.Error("handler was not called")
+		}
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+	})
+
 	t.Run("concurrent requests with same key execute handler only once", func(t *testing.T) {
 		t.Parallel()
 
@@ -673,6 +777,9 @@ func TestMiddleware_Config(t *testing.T) {
 		if cfg.OnErrorEnabled {
 			t.Error("OnErrorEnabled = true, want false")
 		}
+		if cfg.KeyMaxLength != 0 {
+			t.Errorf("KeyMaxLength = %d, want 0", cfg.KeyMaxLength)
+		}
 		if cfg.ValidatorCount != 0 {
 			t.Errorf("ValidatorCount = %d, want 0", cfg.ValidatorCount)
 		}
@@ -684,6 +791,7 @@ func TestMiddleware_Config(t *testing.T) {
 		mw := newTestMiddleware(t,
 			WithKeyHeader("X-Request-Id"),
 			WithTTL(5*time.Minute),
+			WithKeyMaxLength(64),
 			WithStorage(&stubStorage{}),
 			WithOnError(func(_ string, _ error) {}),
 			WithMetrics(Metrics{}),
@@ -708,6 +816,9 @@ func TestMiddleware_Config(t *testing.T) {
 		}
 		if !cfg.OnErrorEnabled {
 			t.Error("OnErrorEnabled = false, want true")
+		}
+		if cfg.KeyMaxLength != 64 {
+			t.Errorf("KeyMaxLength = %d, want 64", cfg.KeyMaxLength)
 		}
 		if cfg.ValidatorCount != 1 {
 			t.Errorf("ValidatorCount = %d, want 1", cfg.ValidatorCount)
