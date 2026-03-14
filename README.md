@@ -172,6 +172,28 @@ http.HandleFunc("/debug/idem/config", func(w http.ResponseWriter, r *http.Reques
 
 The `Config` struct includes JSON tags and implements `fmt.Stringer` for convenient serialization.
 
+## Error Handling
+
+`New` returns sentinel errors for invalid configuration, so callers can identify specific error conditions programmatically using `errors.Is`:
+
+```go
+_, err := idem.New(idem.WithKeyHeader(""))
+if errors.Is(err, idem.ErrEmptyKeyHeader) {
+	// handle empty key header
+}
+```
+
+### Sentinel Errors
+
+| Package | Error | Condition |
+|---------|-------|-----------|
+| `idem` | `ErrEmptyKeyHeader` | Key header is empty |
+| `idem` | `ErrInvalidTTL` | TTL is zero or negative |
+| `idem` | `ErrNilKeyHeaderPattern` | `KeyHeaderPattern` receives a nil regexp |
+| `idem/redis` | `ErrNilClient` | Redis client is nil |
+| `idem/redis` | `ErrEmptyKeyPrefix` | Key prefix is empty |
+| `idem/redis` | `ErrEmptyLockPrefix` | Lock prefix is empty |
+
 ## How It Works
 
 ```
