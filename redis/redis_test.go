@@ -484,6 +484,169 @@ func TestIntegration_Storage_GetReturnsErrorOnConnectionFailure(t *testing.T) {
 	}
 }
 
+// --- Sentinel-only integration tests ---
+
+// sentinelMasterAddr queries a Sentinel node and returns the current master address as "host:port".
+func sentinelMasterAddr(t *testing.T, sentinelAddr, masterName string) string {
+	t.Helper()
+
+	sentinel := goredis.NewSentinelClient(&goredis.Options{
+		Addr: sentinelAddr,
+	})
+	t.Cleanup(func() { _ = sentinel.Close() })
+
+	addr, err := sentinel.GetMasterAddrByName(context.Background(), masterName).Result()
+	if err != nil {
+		t.Fatalf("SENTINEL get-master-addr-by-name: %v", err)
+	}
+
+	return addr[0] + ":" + addr[1]
+}
+
+// waitForFailover polls the Sentinel until the master address changes from originalAddr.
+// It returns the new master address.
+func waitForFailover(t *testing.T, sentinelAddr, masterName, originalAddr string, timeout time.Duration) string {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		sentinel := goredis.NewSentinelClient(&goredis.Options{
+			Addr: sentinelAddr,
+		})
+		addr, err := sentinel.GetMasterAddrByName(context.Background(), masterName).Result()
+		_ = sentinel.Close()
+
+		if err == nil {
+			newAddr := addr[0] + ":" + addr[1]
+			if newAddr != originalAddr {
+				return newAddr
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	t.Fatalf("failover did not complete within %v", timeout)
+	return ""
+}
+
+func TestIntegration_SentinelFailover(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	addrs := os.Getenv("REDIS_SENTINEL_ADDRS")
+	if addrs == "" {
+		t.Skip("REDIS_SENTINEL_ADDRS not set, skipping sentinel failover test")
+	}
+
+	masterName := os.Getenv("REDIS_SENTINEL_MASTER")
+	if masterName == "" {
+		masterName = "mymaster"
+	}
+
+	sentinelAddrs := strings.Split(addrs, ",")
+
+	// Create FailoverClient and Storage
+	client := goredis.NewFailoverClient(&goredis.FailoverOptions{
+		MasterName:    masterName,
+		SentinelAddrs: sentinelAddrs,
+	})
+	t.Cleanup(func() { _ = client.Close() })
+
+	s := newTestStorage(t, client)
+	ctx := context.Background()
+
+	// Get current master address from Sentinel
+	originalMasterAddr := sentinelMasterAddr(t, sentinelAddrs[0], masterName)
+	t.Logf("original master: %s", originalMasterAddr)
+
+	// Store data before failover
+	preFailoverKey := "sentinel-failover-pre"
+	preFailoverRes := &idem.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"application/json"}},
+		Body:       []byte(`{"before":"failover"}`),
+	}
+	if err := s.Set(ctx, preFailoverKey, preFailoverRes, time.Hour); err != nil {
+		t.Fatalf("Set() before failover: %v", err)
+	}
+
+	// Trigger failover via SENTINEL FAILOVER command
+	sentinel := goredis.NewSentinelClient(&goredis.Options{
+		Addr: sentinelAddrs[0],
+	})
+	defer func() { _ = sentinel.Close() }()
+
+	if err := sentinel.Failover(ctx, masterName).Err(); err != nil {
+		t.Fatalf("SENTINEL FAILOVER: %v", err)
+	}
+
+	// Wait for failover to complete
+	newMasterAddr := waitForFailover(t, sentinelAddrs[0], masterName, originalMasterAddr, 30*time.Second)
+	t.Logf("new master after failover: %s", newMasterAddr)
+
+	// Verify: pre-failover data is accessible via FailoverClient
+	got, err := s.Get(ctx, preFailoverKey)
+	if err != nil {
+		t.Fatalf("Get() after failover: %v", err)
+	}
+	if got == nil {
+		t.Fatal("Get() after failover = nil, want pre-failover data")
+	}
+	if got.StatusCode != preFailoverRes.StatusCode {
+		t.Errorf("StatusCode = %d, want %d", got.StatusCode, preFailoverRes.StatusCode)
+	}
+	if string(got.Body) != string(preFailoverRes.Body) {
+		t.Errorf("Body = %q, want %q", got.Body, preFailoverRes.Body)
+	}
+
+	// Verify: Set/Get on new master
+	postFailoverKey := "sentinel-failover-post"
+	postFailoverRes := &idem.Response{
+		StatusCode: http.StatusCreated,
+		Header:     http.Header{"Content-Type": {"text/plain"}},
+		Body:       []byte("after failover"),
+	}
+	if err := s.Set(ctx, postFailoverKey, postFailoverRes, time.Hour); err != nil {
+		t.Fatalf("Set() after failover: %v", err)
+	}
+
+	got, err = s.Get(ctx, postFailoverKey)
+	if err != nil {
+		t.Fatalf("Get() after failover (new key): %v", err)
+	}
+	if got == nil {
+		t.Fatal("Get() after failover (new key) = nil, want non-nil")
+	}
+	if got.StatusCode != postFailoverRes.StatusCode {
+		t.Errorf("StatusCode = %d, want %d", got.StatusCode, postFailoverRes.StatusCode)
+	}
+
+	// Verify: Delete on new master
+	if err := s.Delete(ctx, postFailoverKey); err != nil {
+		t.Fatalf("Delete() after failover: %v", err)
+	}
+	got, err = s.Get(ctx, postFailoverKey)
+	if err != nil {
+		t.Fatalf("Get() after Delete: %v", err)
+	}
+	if got != nil {
+		t.Errorf("Get() after Delete = %v, want nil", got)
+	}
+
+	// Verify: Lock/Unlock on new master
+	lockKey := "sentinel-failover-lock"
+	unlock, err := s.Lock(ctx, lockKey, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Lock() after failover: %v", err)
+	}
+	unlock()
+
+	// Cleanup
+	client.Del(ctx, "idem:"+preFailoverKey)
+	client.Del(ctx, "idem:lock:"+lockKey)
+}
+
 func TestIntegration_Storage_ImplementsLocker(t *testing.T) {
 	client := newTestClient(t)
 
