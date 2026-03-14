@@ -573,7 +573,7 @@ func TestIntegration_SentinelFailover(t *testing.T) {
 
 	// Connect directly to master and issue DEBUG SLEEP
 	masterClient := goredis.NewClient(&goredis.Options{Addr: originalMasterAddr})
-	defer masterClient.Close()
+	defer func() { _ = masterClient.Close() }()
 
 	// DEBUG SLEEP 15: makes the master unresponsive for 15 seconds.
 	// Sentinel down-after-milliseconds is 5000ms, so failover will be triggered.
