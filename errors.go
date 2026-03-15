@@ -13,4 +13,7 @@ var (
 	// ErrNilKeyHeaderPattern is returned by KeyHeaderPattern when the
 	// pattern argument is nil.
 	ErrNilKeyHeaderPattern = errors.New("idem: key header pattern must not be nil")
+
+	// ErrInvalidTTLRange is returned by TTLRange when min exceeds max.
+	ErrInvalidTTLRange = errors.New("idem: TTLRange min must not exceed max")
 )

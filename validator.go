@@ -26,6 +26,19 @@ func MinTTL(limit time.Duration) Validator {
 	}
 }
 
+// TTLRange returns a Validator that rejects a TTL outside the [lower, upper] range.
+func TTLRange(lower, upper time.Duration) Validator {
+	return func(cfg Config) error {
+		if lower > upper {
+			return ErrInvalidTTLRange
+		}
+		if cfg.TTL < lower || cfg.TTL > upper {
+			return fmt.Errorf("idem: ttl %v is out of range [%v, %v]", cfg.TTL, lower, upper)
+		}
+		return nil
+	}
+}
+
 // KeyHeaderPattern returns a Validator that requires the key header
 // name to match the given regular expression pattern.
 func KeyHeaderPattern(pattern *regexp.Regexp) Validator {

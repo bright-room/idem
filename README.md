@@ -111,6 +111,7 @@ Common validation rules are available as factory functions:
 |-----------|-------------|
 | `MaxTTL(max)` | Rejects a TTL longer than `max` |
 | `MinTTL(min)` | Rejects a TTL shorter than `min` |
+| `TTLRange(min, max)` | Rejects a TTL outside the `[min, max]` range |
 | `KeyHeaderPattern(re)` | Requires the key header name to match the regular expression |
 | `AllowedKeyHeaders(h...)` | Requires the key header name to be one of the allowed values |
 
