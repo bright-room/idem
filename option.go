@@ -1,7 +1,6 @@
 package idem
 
 import (
-	"errors"
 	"fmt"
 	"time"
 )
@@ -153,11 +152,11 @@ func WithValidation(validators ...Validator) Option {
 // validate checks the config for invalid values.
 func (c *config) validate() error {
 	if c.keyHeader == "" {
-		return errors.New("idem: keyHeader must not be empty")
+		return ErrEmptyKeyHeader
 	}
 
 	if c.ttl <= 0 {
-		return errors.New("idem: ttl must be positive")
+		return ErrInvalidTTL
 	}
 
 	snap := c.snapshot()
