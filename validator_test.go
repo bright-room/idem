@@ -1,6 +1,7 @@
 package idem
 
 import (
+	"errors"
 	"regexp"
 	"testing"
 	"time"
@@ -85,6 +86,92 @@ func TestMinTTL(t *testing.T) {
 			err := v(Config{KeyHeader: DefaultKeyHeader, TTL: tt.ttl})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("MinTTL(%v)() error = %v, wantErr %v", tt.min, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestTTLRange(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		min          time.Duration
+		max          time.Duration
+		ttl          time.Duration
+		wantErr      bool
+		wantSentinel error
+	}{
+		{
+			name:    "exactly at minimum",
+			min:     1 * time.Minute,
+			max:     24 * time.Hour,
+			ttl:     1 * time.Minute,
+			wantErr: false,
+		},
+		{
+			name:    "exactly at maximum",
+			min:     1 * time.Minute,
+			max:     24 * time.Hour,
+			ttl:     24 * time.Hour,
+			wantErr: false,
+		},
+		{
+			name:    "within range",
+			min:     1 * time.Minute,
+			max:     24 * time.Hour,
+			ttl:     1 * time.Hour,
+			wantErr: false,
+		},
+		{
+			name:    "below minimum",
+			min:     1 * time.Minute,
+			max:     24 * time.Hour,
+			ttl:     30 * time.Second,
+			wantErr: true,
+		},
+		{
+			name:    "exceeds maximum",
+			min:     1 * time.Minute,
+			max:     24 * time.Hour,
+			ttl:     48 * time.Hour,
+			wantErr: true,
+		},
+		{
+			name:    "min equals max and TTL matches",
+			min:     1 * time.Hour,
+			max:     1 * time.Hour,
+			ttl:     1 * time.Hour,
+			wantErr: false,
+		},
+		{
+			name:    "min equals max and TTL does not match",
+			min:     1 * time.Hour,
+			max:     1 * time.Hour,
+			ttl:     2 * time.Hour,
+			wantErr: true,
+		},
+		{
+			name:         "min exceeds max",
+			min:          24 * time.Hour,
+			max:          1 * time.Minute,
+			ttl:          1 * time.Hour,
+			wantErr:      true,
+			wantSentinel: ErrInvalidTTLRange,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			v := TTLRange(tt.min, tt.max)
+			err := v(Config{KeyHeader: DefaultKeyHeader, TTL: tt.ttl})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("TTLRange(%v, %v)() error = %v, wantErr %v", tt.min, tt.max, err, tt.wantErr)
+			}
+			if tt.wantSentinel != nil && !errors.Is(err, tt.wantSentinel) {
+				t.Errorf("TTLRange(%v, %v)() error = %v, want %v", tt.min, tt.max, err, tt.wantSentinel)
 			}
 		})
 	}
@@ -241,6 +328,33 @@ func TestNew_withPresetValidators(t *testing.T) {
 
 		_, err := New(
 			WithValidation(KeyHeaderPattern(nil)),
+		)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("succeeds when TTLRange passes", func(t *testing.T) {
+		t.Parallel()
+
+		m, err := New(
+			WithTTL(1*time.Hour),
+			WithValidation(TTLRange(1*time.Minute, 24*time.Hour)),
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if m == nil {
+			t.Fatal("middleware is nil")
+		}
+	})
+
+	t.Run("returns error when TTLRange fails", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := New(
+			WithTTL(48*time.Hour),
+			WithValidation(TTLRange(1*time.Minute, 24*time.Hour)),
 		)
 		if err == nil {
 			t.Fatal("expected error, got nil")
