@@ -1,13 +1,13 @@
 ---
 name: review
-description: Perform a thorough code review on the current branch's changes and output a structured Markdown report. Use when reviewing code changes before creating a PR or when asked to review code.
+description: コードレビューを実施する。ローカルではブランチ差分または main 全体のレビュー、CI 環境では PR レビューとして投稿する。
 disable-model-invocation: true
-argument-hint: "[base-branch (default: main)]"
+argument-hint: "[base-branch]"
 ---
 
 # Code Review Skill
 
-現在のブランチの変更に対する徹底的なコードレビューを実施し、構造化されたMarkdownレポートとして出力すること。
+コードレビューを実施し、構造化された Markdown レポートとして出力すること。
 
 ## レビュー方針
 
@@ -16,15 +16,58 @@ argument-hint: "[base-branch (default: main)]"
 - 書き始める前に深く考察し、すべての箇所を漏れなくチェックすること
 - 事実に基づかない内容（ハルシネーション）を含めないこと
 
+## レビューモードの解決ルール
+
+引数と実行環境に応じて、レビューモードを以下の優先順で決定する:
+
+| 条件 | モード | レビュー対象 | 出力先 |
+|------|--------|-------------|--------|
+| ローカル + `main` 以外のブランチ指定 | **ブランチ差分レビュー** | 指定ブランチとの差分 | ローカルファイル |
+| ローカル + 引数なし or `main` 指定 | **コードベース全体レビュー** | main ブランチの全コード | ローカルファイル |
+| `CI=true` + 引数なし | **PR レビュー** | PR の差分 | PR Review コメント |
+
 ## 手順
 
 ### 1. レビュー対象の特定
 
-ベースブランチ（デフォルト: `main`、引数で指定可能: `$ARGUMENTS`）と現在のブランチの差分を取得してレビュー対象を特定する。
+#### モード A: ブランチ差分レビュー（ローカル + main 以外のブランチ指定）
+
+指定されたベースブランチと現在のブランチの差分をレビューする。
 
 ```bash
-# ベースブランチの決定
-BASE_BRANCH="${ARGUMENTS:-main}"
+BASE_BRANCH="$ARGUMENTS"
+
+# 差分のあるファイル一覧
+git diff ${BASE_BRANCH}...HEAD --name-only
+
+# 差分の内容
+git diff ${BASE_BRANCH}...HEAD
+
+# コミット履歴
+git log ${BASE_BRANCH}...HEAD --oneline
+```
+
+#### モード B: コードベース全体レビュー（ローカル + 引数なし or main 指定）
+
+main ブランチのコードベース全体を対象にレビューする。差分ではなく、リポジトリ全体のコード品質・設計・テストを包括的にレビューする。
+
+```bash
+git checkout main
+git pull origin main
+```
+
+- リポジトリ内のすべての Go ソースファイル（`*.go`）を読み込む
+- テストファイル、設定ファイル（`go.mod`、`.golangci.yml` 等）、ドキュメントも対象とする
+- `_examples/` ディレクトリはレビュー対象外とする
+
+#### モード C: PR レビュー（CI 環境）
+
+PR の差分を取得してレビューする。
+
+```bash
+# PR 情報の取得
+PR_NUMBER=$(gh pr view --json number -q .number)
+BASE_BRANCH=$(gh pr view --json baseRefName -q .baseRefName)
 
 # 差分のあるファイル一覧
 git diff ${BASE_BRANCH}...HEAD --name-only
@@ -38,7 +81,7 @@ git log ${BASE_BRANCH}...HEAD --oneline
 
 ### 2. コードの読解
 
-差分のあるファイルをすべて読み込み、変更内容を深く理解する。変更されたファイルだけでなく、関連するファイル（呼び出し元、インターフェース、設定ファイルなど）も確認すること。
+レビュー対象のファイルをすべて読み込み、内容を深く理解する。対象ファイルだけでなく、関連するファイル（呼び出し元、インターフェース、設定ファイルなど）も確認すること。
 
 ### 3. レビューの実施
 
@@ -53,17 +96,20 @@ git log ${BASE_BRANCH}...HEAD --oneline
 
 ### 4. レビュー結果の出力
 
-実行環境に応じて出力先を切り替える。環境変数 `CI` の有無で判定すること。
+レビューモードに応じて出力先を切り替える。
 
-#### ローカル実行時 (`CI` が未設定)
+#### モード A・B: ローカル実行時
 
 レビュー結果を `.claude/outputs/reviews/` ディレクトリにファイルとして出力する。
 
 - ディレクトリが存在しない場合は作成すること
-- ファイル名: `REVIEW-<現在のブランチ名（スラッシュをハイフンに変換）>.md`
-  - 例: ブランチ `feature/add-middleware` → `REVIEW-feature-add-middleware.md`
+- ファイル名:
+  - モード A: `REVIEW-<現在のブランチ名（スラッシュをハイフンに変換）>.md`
+    - 例: ブランチ `feature/add-middleware` → `REVIEW-feature-add-middleware.md`
+  - モード B: `REVIEW-main-YYYY-MM-DD.md`
+    - 例: `REVIEW-main-2026-03-16.md`
 
-#### GitHub Actions 実行時 (`CI=true`)
+#### モード C: GitHub Actions 実行時 (`CI=true`)
 
 レビュー結果を GitHub Pull Request Review として投稿する。人間がレビューするのと同じように、**サマリはレビュー本文**に、**各指摘はコードの該当行にインラインコメント**として紐付ける。
 

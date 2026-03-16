@@ -2,7 +2,7 @@
 
 ## 概要
 
-GitHub Issue の棚卸を行うスキル。対応済み Issue のクローズ、マイルストーンの平準化、実装プランからの新規 Issue 作成を一括で実施する。
+GitHub Issue の棚卸を一括実行するスキル。4つのサブスキルを順番に実行し、統合レポートを出力する。
 
 ## 使い方
 
@@ -12,12 +12,23 @@ GitHub Issue の棚卸を行うスキル。対応済み Issue のクローズ、
 
 引数は不要。実行すると自動的にすべての棚卸作業を行う。
 
+## サブスキル
+
+棚卸の各工程は独立したスキルとしても利用できる。自然言語で依頼すると自動的に呼び出される。
+
+| スキル | 単独での使い方 | 説明 |
+|--------|--------------|------|
+| `close-resolved-issues` | 「対応済み Issue を閉じて」 | コードベースと PR を確認し、対応済みの Issue をクローズ |
+| `label-issues` | 「ラベルついてない Issue にラベルつけて」 | ラベル未付与の Issue に種別・優先度ラベルを付与 |
+| `balance-milestones` | 「マイルストーン整理して」 | マイルストーン未割り当て Issue の紐づけと平準化 |
+| `create-issues-from-plans` | 「プランから Issue 作って」 | 実装プランの「今後の展望」から新規 Issue を作成 |
+
 ## 処理の流れ
 
-1. **対応済み Issue のクローズ** — コードベースと PR を確認し、既に対応済みの Issue をクローズ
-2. **既存 Issue のラベル付与** — ラベル未付与の Issue に種別・優先度ラベルを付与
-3. **マイルストーンの平準化** — マイルストーン未割り当ての Issue にマイルストーンを紐づけ、偏りがあれば調整・新規作成
-4. **実装プランからの Issue 作成** — `.claude/outputs/plans/` が存在すれば「今後の展望」セクションから、未 Issue 化の項目を新規 Issue として作成
+1. **対応済み Issue のクローズ** (`close-resolved-issues`)
+2. **既存 Issue のラベル付与** (`label-issues`)
+3. **マイルストーンの平準化** (`balance-milestones`)
+4. **実装プランからの Issue 作成** (`create-issues-from-plans`)
 5. **棚卸レポートの出力** — `.claude/outputs/triage/TRIAGE-YYYY-MM-DD-HHmmss.md` に結果を出力
 
 ## マイルストーンの割り当て基準
@@ -39,4 +50,8 @@ GitHub Issue の棚卸を行うスキル。対応済み Issue のクローズ、
 
 ## 定義ファイル
 
-[SKILL.md](SKILL.md)
+- [triage SKILL.md](SKILL.md) — オーケストレーター
+- [close-resolved-issues](../close-resolved-issues/SKILL.md)
+- [label-issues](../label-issues/SKILL.md)
+- [balance-milestones](../balance-milestones/SKILL.md)
+- [create-issues-from-plans](../create-issues-from-plans/SKILL.md)
