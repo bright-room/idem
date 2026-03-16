@@ -2,22 +2,40 @@
 
 ## 概要
 
-ブランチの変更差分に対する構造化コードレビューを実施するスキル。
+コードレビューを実施するスキル。ローカルではブランチ差分または main 全体のレビュー、CI 環境では PR レビューとして投稿する。
 
 ## 使い方
 
+### ローカル
+
 ```
-/review              # main ブランチとの差分をレビュー
-/review develop      # develop ブランチとの差分をレビュー
+/review              # main ブランチ全体のコードレビュー
+/review main         # main ブランチ全体のコードレビュー（同上）
+/review develop      # develop ブランチとの差分レビュー
 ```
+
+### GitHub PR 上（CI 環境）
+
+```
+@claude /review      # PR の差分をレビュー
+```
+
+引数なしで、PR の差分を自動取得してレビューする。
+
+## レビューモード
+
+| 条件 | モード | レビュー対象 | 出力先 |
+|------|--------|-------------|--------|
+| ローカル + `main` 以外のブランチ指定 | ブランチ差分レビュー | 指定ブランチとの差分 | ローカルファイル |
+| ローカル + 引数なし or `main` 指定 | コードベース全体レビュー | main ブランチの全コード | ローカルファイル |
+| `CI=true` + 引数なし | PR レビュー | PR の差分 | PR Review コメント |
 
 ## 出力先
 
-実行環境によって自動的に切り替わる。
-
 | 環境 | 出力先 |
 |------|--------|
-| ローカル | `.claude/outputs/reviews/REVIEW-<branch-name>.md` にファイル出力 |
+| ローカル（差分レビュー） | `.claude/outputs/reviews/REVIEW-<branch-name>.md` |
+| ローカル（全体レビュー） | `.claude/outputs/reviews/REVIEW-main-YYYY-MM-DD.md` |
 | GitHub Actions (`CI=true`) | PR Review API で投稿（サマリはレビュー本文、各指摘はコード行にインラインコメント） |
 
 ## レビュー結果の構成
