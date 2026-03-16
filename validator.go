@@ -92,6 +92,37 @@ func KeyHeaderPattern(pattern *regexp.Regexp) *PresetValidator {
 	}
 }
 
+// All returns a Validator that succeeds only when every given validator
+// succeeds. Validators run in order; validation stops at the first error.
+func All(validators ...Validator) *PresetValidator {
+	return &PresetValidator{
+		validate: func(cfg Config) error {
+			for _, v := range validators {
+				if err := v.Validate(cfg); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
+
+// Any returns a Validator that succeeds when at least one of the given
+// validators succeeds. Validators run in order; validation stops at the
+// first success. If all validators fail, an error is returned.
+func Any(validators ...Validator) *PresetValidator {
+	return &PresetValidator{
+		validate: func(cfg Config) error {
+			for _, v := range validators {
+				if err := v.Validate(cfg); err == nil {
+					return nil
+				}
+			}
+			return ErrAllValidatorsFailed
+		},
+	}
+}
+
 // AllowedKeyHeaders returns a Validator that requires the key header
 // name to be one of the specified allowed values.
 func AllowedKeyHeaders(allowed ...string) *PresetValidator {

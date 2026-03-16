@@ -138,6 +138,37 @@ mw, err := idem.New(
 )
 ```
 
+#### Validator Composition
+
+Use `All` and `Any` to combine validators with AND / OR logic:
+
+```go
+mw, err := idem.New(
+	idem.WithTTL(1 * time.Hour),
+	idem.WithValidation(
+		// All: every validator must pass (AND)
+		idem.All(
+			idem.MinTTL(1 * time.Minute),
+			idem.MaxTTL(24 * time.Hour),
+		),
+		// Any: at least one validator must pass (OR)
+		idem.Any(
+			idem.AllowedKeyHeaders("Idempotency-Key"),
+			idem.KeyHeaderPattern(regexp.MustCompile(`^X-`)),
+		),
+	),
+)
+```
+
+`All` and `Any` return `*PresetValidator`, so they support `.WithMessage()` and can be nested arbitrarily:
+
+```go
+idem.All(
+	idem.Any(v1, v2),
+	v3,
+).WithMessage("validation failed")
+```
+
 ### Metrics
 
 Use `WithMetrics` to observe cache hits, misses, lock contention, and errors — for example, to export to Prometheus:
