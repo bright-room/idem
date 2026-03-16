@@ -479,9 +479,9 @@ func TestPresetValidator_WithMessage_doesNotMutateOriginal(t *testing.T) {
 func TestAll(t *testing.T) {
 	t.Parallel()
 
-	alwaysPass := ValidatorFunc(func(cfg Config) error { return nil })
-	alwaysFail := ValidatorFunc(func(cfg Config) error { return errors.New("fail") })
-	alwaysFail2 := ValidatorFunc(func(cfg Config) error { return errors.New("fail2") })
+	alwaysPass := ValidatorFunc(func(_ Config) error { return nil })
+	alwaysFail := ValidatorFunc(func(_ Config) error { return errors.New("fail") })
+	alwaysFail2 := ValidatorFunc(func(_ Config) error { return errors.New("fail2") })
 
 	tests := []struct {
 		name       string
@@ -543,7 +543,7 @@ func TestAll(t *testing.T) {
 func TestAll_WithMessage(t *testing.T) {
 	t.Parallel()
 
-	alwaysFail := ValidatorFunc(func(cfg Config) error { return errors.New("fail") })
+	alwaysFail := ValidatorFunc(func(_ Config) error { return errors.New("fail") })
 
 	v := All(alwaysFail).WithMessage("custom all error")
 	err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
@@ -558,8 +558,8 @@ func TestAll_WithMessage(t *testing.T) {
 func TestAny(t *testing.T) {
 	t.Parallel()
 
-	alwaysPass := ValidatorFunc(func(cfg Config) error { return nil })
-	alwaysFail := ValidatorFunc(func(cfg Config) error { return errors.New("fail") })
+	alwaysPass := ValidatorFunc(func(_ Config) error { return nil })
+	alwaysFail := ValidatorFunc(func(_ Config) error { return errors.New("fail") })
 
 	tests := []struct {
 		name         string
@@ -626,7 +626,7 @@ func TestAny(t *testing.T) {
 func TestAny_WithMessage(t *testing.T) {
 	t.Parallel()
 
-	alwaysFail := ValidatorFunc(func(cfg Config) error { return errors.New("fail") })
+	alwaysFail := ValidatorFunc(func(_ Config) error { return errors.New("fail") })
 
 	v := Any(alwaysFail).WithMessage("custom any error")
 	err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
@@ -641,8 +641,8 @@ func TestAny_WithMessage(t *testing.T) {
 func TestAll_Any_nested(t *testing.T) {
 	t.Parallel()
 
-	alwaysPass := ValidatorFunc(func(cfg Config) error { return nil })
-	alwaysFail := ValidatorFunc(func(cfg Config) error { return errors.New("fail") })
+	alwaysPass := ValidatorFunc(func(_ Config) error { return nil })
+	alwaysFail := ValidatorFunc(func(_ Config) error { return errors.New("fail") })
 
 	t.Run("All with nested Any succeeds", func(t *testing.T) {
 		t.Parallel()
@@ -688,7 +688,7 @@ func TestAll_Any_nested(t *testing.T) {
 func TestAll_WithMessage_doesNotMutateOriginal(t *testing.T) {
 	t.Parallel()
 
-	alwaysFail := ValidatorFunc(func(cfg Config) error { return errors.New("original") })
+	alwaysFail := ValidatorFunc(func(_ Config) error { return errors.New("original") })
 	original := All(alwaysFail)
 	_ = original.WithMessage("custom")
 
@@ -704,7 +704,7 @@ func TestAll_WithMessage_doesNotMutateOriginal(t *testing.T) {
 func TestAny_WithMessage_doesNotMutateOriginal(t *testing.T) {
 	t.Parallel()
 
-	alwaysFail := ValidatorFunc(func(cfg Config) error { return errors.New("fail") })
+	alwaysFail := ValidatorFunc(func(_ Config) error { return errors.New("fail") })
 	original := Any(alwaysFail)
 	_ = original.WithMessage("custom")
 
