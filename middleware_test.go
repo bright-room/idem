@@ -795,7 +795,7 @@ func TestMiddleware_Config(t *testing.T) {
 			WithStorage(&stubStorage{}),
 			WithOnError(func(_ string, _ error) {}),
 			WithMetrics(Metrics{}),
-			WithValidation(func(_ Config) error { return nil }),
+			WithValidation(ValidatorFunc(func(_ Config) error { return nil })),
 		)
 		cfg := mw.Config()
 

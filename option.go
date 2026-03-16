@@ -46,9 +46,21 @@ type Config struct {
 	ValidatorCount int `json:"validator_count"`
 }
 
-// Validator is a function that inspects the middleware configuration and
-// returns an error if it does not meet application-specific requirements.
-type Validator func(Config) error
+// Validator inspects the middleware configuration and returns an error
+// if it does not meet application-specific requirements.
+type Validator interface {
+	Validate(Config) error
+}
+
+// ValidatorFunc is an adapter to allow the use of ordinary functions as Validators.
+// If f is a function with the appropriate signature, ValidatorFunc(f) is a Validator
+// that calls f.
+type ValidatorFunc func(Config) error
+
+// Validate calls f(cfg).
+func (f ValidatorFunc) Validate(cfg Config) error {
+	return f(cfg)
+}
 
 type config struct {
 	keyHeader    string
@@ -161,7 +173,7 @@ func (c *config) validate() error {
 
 	snap := c.snapshot()
 	for _, v := range c.validators {
-		if err := v(snap); err != nil {
+		if err := v.Validate(snap); err != nil {
 			return err
 		}
 	}

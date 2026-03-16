@@ -184,9 +184,9 @@ func TestConfig_validate(t *testing.T) {
 			name: "custom validator passes",
 			cfg: func() *config {
 				c := defaultConfig()
-				WithValidation(func(_ Config) error {
+				WithValidation(ValidatorFunc(func(_ Config) error {
 					return nil
-				})(c)
+				}))(c)
 				return c
 			}(),
 			wantErr: false,
@@ -195,9 +195,9 @@ func TestConfig_validate(t *testing.T) {
 			name: "custom validator fails",
 			cfg: func() *config {
 				c := defaultConfig()
-				WithValidation(func(_ Config) error {
+				WithValidation(ValidatorFunc(func(_ Config) error {
 					return errors.New("custom: validation failed")
-				})(c)
+				}))(c)
 				return c
 			}(),
 			wantErr: true,
@@ -208,14 +208,14 @@ func TestConfig_validate(t *testing.T) {
 				c := defaultConfig()
 				second := false
 				WithValidation(
-					func(_ Config) error {
+					ValidatorFunc(func(_ Config) error {
 						return errors.New("first fails")
-					},
-					func(_ Config) error {
+					}),
+					ValidatorFunc(func(_ Config) error {
 						second = true
 						_ = second
 						return nil
-					},
+					}),
 				)(c)
 				return c
 			}(),
@@ -228,7 +228,7 @@ func TestConfig_validate(t *testing.T) {
 					keyHeader: "X-Test",
 					ttl:       5 * time.Minute,
 				}
-				WithValidation(func(cfg Config) error {
+				WithValidation(ValidatorFunc(func(cfg Config) error {
 					if cfg.KeyHeader != "X-Test" {
 						return errors.New("unexpected KeyHeader")
 					}
@@ -236,7 +236,7 @@ func TestConfig_validate(t *testing.T) {
 						return errors.New("unexpected TTL")
 					}
 					return nil
-				})(c)
+				}))(c)
 				return c
 			}(),
 			wantErr: false,
@@ -248,9 +248,9 @@ func TestConfig_validate(t *testing.T) {
 					keyHeader: "",
 					ttl:       DefaultTTL,
 				}
-				WithValidation(func(_ Config) error {
+				WithValidation(ValidatorFunc(func(_ Config) error {
 					return errors.New("should not reach here")
-				})(c)
+				}))(c)
 				return c
 			}(),
 			wantErr: true,
@@ -275,17 +275,17 @@ func TestWithValidation(t *testing.T) {
 	cfg := defaultConfig()
 
 	called := false
-	v := func(_ Config) error {
+	v := ValidatorFunc(func(_ Config) error {
 		called = true
 		return nil
-	}
+	})
 	WithValidation(v)(cfg)
 
 	if len(cfg.validators) != 1 {
 		t.Fatalf("validators length = %d, want 1", len(cfg.validators))
 	}
 
-	if err := cfg.validators[0](cfg.snapshot()); err != nil {
+	if err := cfg.validators[0].Validate(cfg.snapshot()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -399,8 +399,8 @@ func TestConfig_snapshot(t *testing.T) {
 		}
 
 		WithValidation(
-			func(_ Config) error { return nil },
-			func(_ Config) error { return nil },
+			ValidatorFunc(func(_ Config) error { return nil }),
+			ValidatorFunc(func(_ Config) error { return nil }),
 		)(cfg)
 
 		if cfg.snapshot().ValidatorCount != 2 {
@@ -445,9 +445,9 @@ func TestNew_withCustomValidation(t *testing.T) {
 	t.Run("returns error from custom validator", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := New(WithValidation(func(_ Config) error {
+		_, err := New(WithValidation(ValidatorFunc(func(_ Config) error {
 			return errors.New("custom: not allowed")
-		}))
+		})))
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -456,9 +456,9 @@ func TestNew_withCustomValidation(t *testing.T) {
 	t.Run("succeeds with passing custom validator", func(t *testing.T) {
 		t.Parallel()
 
-		m, err := New(WithValidation(func(_ Config) error {
+		m, err := New(WithValidation(ValidatorFunc(func(_ Config) error {
 			return nil
-		}))
+		})))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

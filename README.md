@@ -92,12 +92,12 @@ Use `WithValidation` to enforce application-specific rules on the middleware con
 ```go
 mw, err := idem.New(
 	idem.WithTTL(30 * time.Minute),
-	idem.WithValidation(func(cfg idem.Config) error {
+	idem.WithValidation(idem.ValidatorFunc(func(cfg idem.Config) error {
 		if cfg.TTL > 1*time.Hour {
 			return fmt.Errorf("TTL must not exceed 1 hour, got %v", cfg.TTL)
 		}
 		return nil
-	}),
+	})),
 )
 ```
 
@@ -122,6 +122,18 @@ mw, err := idem.New(
 		idem.MaxTTL(24 * time.Hour),
 		idem.MinTTL(1 * time.Minute),
 		idem.AllowedKeyHeaders("Idempotency-Key", "X-Request-Id"),
+	),
+)
+```
+
+Preset validators support custom error messages via `WithMessage`:
+
+```go
+mw, err := idem.New(
+	idem.WithTTL(1 * time.Hour),
+	idem.WithValidation(
+		idem.MaxTTL(24 * time.Hour).WithMessage("TTL is too long for this service"),
+		idem.MinTTL(1 * time.Minute).WithMessage("TTL is too short"),
 	),
 )
 ```
