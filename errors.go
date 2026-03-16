@@ -16,4 +16,7 @@ var (
 
 	// ErrInvalidTTLRange is returned by TTLRange when min exceeds max.
 	ErrInvalidTTLRange = errors.New("idem: TTLRange min must not exceed max")
+
+	// ErrAllValidatorsFailed is returned by Any when every validator fails.
+	ErrAllValidatorsFailed = errors.New("idem: all validators failed")
 )

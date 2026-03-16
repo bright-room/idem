@@ -33,7 +33,7 @@ make shell          # Interactive bash in container
 Key interfaces:
 - `Storage` — `Get`/`Set`/`Delete` for cached responses (pluggable backend)
 - `Locker` — optional per-key mutual exclusion for concurrent request handling. Storage implementations that also implement `Locker` enable automatic lock acquisition in the middleware. Returns 409 Conflict on lock failure.
-- `Validator` — `Validate(Config) error` for configuration validation. `ValidatorFunc` is a function adapter (like `http.HandlerFunc`). Preset validators (`MaxTTL`, `MinTTL`, etc.) return `*PresetValidator` which supports `.WithMessage()` for custom error messages.
+- `Validator` — `Validate(Config) error` for configuration validation. `ValidatorFunc` is a function adapter (like `http.HandlerFunc`). Preset validators (`MaxTTL`, `MinTTL`, etc.) return `*PresetValidator` which supports `.WithMessage()` for custom error messages. Composition functions `All` (AND) and `Any` (OR) combine multiple validators and also return `*PresetValidator`.
 
 Configuration uses the **Functional Options** pattern (`WithXxx()` functions).
 
