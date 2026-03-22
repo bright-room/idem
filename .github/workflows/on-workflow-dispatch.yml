@@ -55,13 +55,15 @@ jobs:
           REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
         run: |
-          TAG_SHA=$(gh api "repos/$REPO/git/tags" \
-            -f tag="$VERSION" \
-            -f message="Release $VERSION" \
-            -f object="$GITHUB_SHA" \
-            -f type="commit" \
+          TAG_SHA=$(gh api "repos/${REPO}/git/tags" \
+            --method POST \
+            --field "tag=${VERSION}" \
+            --field "message=Release ${VERSION}" \
+            --field "object=${GITHUB_SHA}" \
+            --field "type=commit" \
             --jq '.sha')
 
-          gh api "repos/$REPO/git/refs" \
-            -f ref="refs/tags/$VERSION" \
-            -f sha="$TAG_SHA"
+          gh api "repos/${REPO}/git/refs" \
+            --method POST \
+            --field "ref=refs/tags/${VERSION}" \
+            --field "sha=${TAG_SHA}"
