@@ -110,6 +110,7 @@ func (s *MemoryStorage) deleteExpired() {
 	for key, e := range s.entries {
 		if now.After(e.expiresAt) {
 			delete(s.entries, key)
+			s.locks.Delete(key)
 		}
 	}
 }
