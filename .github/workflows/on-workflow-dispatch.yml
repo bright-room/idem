@@ -49,14 +49,19 @@ jobs:
           app-id: ${{ vars.CHLOE_CHAN_APP_ID }}
           private-key: ${{ secrets.CHLOE_CHAN_APP_PRIVATE_KEY }}
 
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Create and push tag
+      - name: Create signed tag via API
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
         run: |
-          git config user.name "chloe-chan-bot[bot]"
-          git config user.email "${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
-          git tag -a "${{ inputs.version }}" -m "Release ${{ inputs.version }}"
-          git push origin "${{ inputs.version }}"
+          TAG_SHA=$(gh api "repos/$REPO/git/tags" \
+            -f tag="$VERSION" \
+            -f message="Release $VERSION" \
+            -f object="$GITHUB_SHA" \
+            -f type="commit" \
+            --jq '.sha')
+
+          gh api "repos/$REPO/git/refs" \
+            -f ref="refs/tags/$VERSION" \
+            -f sha="$TAG_SHA"
