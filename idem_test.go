@@ -214,6 +214,51 @@ func TestMemoryStorage_WithCleanupInterval(t *testing.T) {
 		}
 	})
 
+	t.Run("removes expired lock entries in background", func(t *testing.T) {
+		t.Parallel()
+
+		s := NewMemoryStorage(WithCleanupInterval(10 * time.Millisecond))
+		defer func() {
+			if err := s.Close(); err != nil {
+				t.Errorf("Close() error = %v", err)
+			}
+		}()
+
+		ctx := context.Background()
+		res := &Response{StatusCode: http.StatusOK, Body: []byte("data")}
+
+		if err := s.Set(ctx, "key-1", res, 20*time.Millisecond); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		// Acquire and release lock to create lock entry
+		unlock, err := s.Lock(ctx, "key-1", time.Hour)
+		if err != nil {
+			t.Fatalf("Lock() error = %v", err)
+		}
+		unlock()
+
+		// Verify lock entry exists
+		if _, ok := s.locks.Load("key-1"); !ok {
+			t.Fatal("expected lock entry to exist before cleanup")
+		}
+
+		// Wait for the entry to expire and cleanup to run
+		time.Sleep(50 * time.Millisecond)
+
+		s.mu.RLock()
+		_, entryExists := s.entries["key-1"]
+		s.mu.RUnlock()
+
+		if entryExists {
+			t.Error("expected expired entry to be removed by background cleanup")
+		}
+
+		if _, lockExists := s.locks.Load("key-1"); lockExists {
+			t.Error("expected expired lock entry to be removed by background cleanup")
+		}
+	})
+
 	t.Run("Close stops cleanup goroutine", func(t *testing.T) {
 		t.Parallel()
 
