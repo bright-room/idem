@@ -14,6 +14,8 @@ argument-hint: "[markdown-file-path] [--branch <branch-name>]"
 - Docker が起動していること（ビルド・テストは Docker 内で実行される）
 - `make build` で Docker イメージがビルド済みであること
 
+実行開始時に `docker info` で Docker の起動を確認すること。起動していない場合はユーザーに Docker の起動を依頼して中断する。
+
 ## 引数
 
 ```
