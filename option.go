@@ -94,8 +94,8 @@ func (c *config) snapshot() Config {
 // String returns a human-readable summary of the configuration.
 func (c Config) String() string {
 	return fmt.Sprintf(
-		"idem.Config{KeyHeader: %q, TTL: %v, KeyMaxLength: %d, StorageType: %s, LockSupported: %t, MetricsEnabled: %t}",
-		c.KeyHeader, c.TTL, c.KeyMaxLength, c.StorageType, c.LockSupported, c.MetricsEnabled,
+		"idem.Config{KeyHeader: %q, TTL: %v, KeyMaxLength: %d, StorageType: %s, LockSupported: %t, MetricsEnabled: %t, OnErrorEnabled: %t, ValidatorCount: %d}",
+		c.KeyHeader, c.TTL, c.KeyMaxLength, c.StorageType, c.LockSupported, c.MetricsEnabled, c.OnErrorEnabled, c.ValidatorCount,
 	)
 }
 

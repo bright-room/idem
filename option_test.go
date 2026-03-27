@@ -421,10 +421,16 @@ func TestConfig_String(t *testing.T) {
 			StorageType:    "*idem.MemoryStorage",
 			LockSupported:  true,
 			MetricsEnabled: true,
+			OnErrorEnabled: true,
+			ValidatorCount: 3,
 		}
 
 		s := cfg.String()
-		for _, want := range []string{"Idempotency-Key", "24h0m0s", "*idem.MemoryStorage", "true"} {
+		for _, want := range []string{
+			"Idempotency-Key", "24h0m0s", "*idem.MemoryStorage",
+			"LockSupported: true", "MetricsEnabled: true",
+			"OnErrorEnabled: true", "ValidatorCount: 3",
+		} {
 			if !strings.Contains(s, want) {
 				t.Errorf("String() = %q, missing %q", s, want)
 			}
