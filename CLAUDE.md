@@ -51,13 +51,7 @@ Three parallel jobs: lint, unit test (with octocov coverage), integration test. 
 
 ## Custom Skills
 
-- `/plan [issue-number]` — GitHub Issue を参照して実装プランを作成する。ローカルでは Issue 番号必須でファイル出力、CI 環境では引数なしで現在の Issue からコメントとして投稿
-- `/implement [markdown-file-path] [--branch <branch-name>]` — 実装プランに基づいてコードを実装する。ローカルではファイルパス指定、CI 環境では引数なしで現在の Issue のコメント内容から実装
-- `/review [base-branch]` — コードレビューを実施する。ローカルでは引数なし/main で全体レビュー、main 以外のブランチ指定で差分レビュー、CI 環境では PR レビューとして投稿
-- `/triage` — Issue の棚卸を一括実行（下記4つのサブスキルを順番に実行し、統合レポートを出力）
-
-サブスキル（自然言語で自動呼び出し可能）:
-- `close-resolved-issues` — 対応済み Issue を検出してクローズ
-- `label-issues` — ラベル未付与の Issue にラベルを付与
-- `balance-milestones` — マイルストーンの割り当てと平準化
-- `create-issues-from-plans` — 実装プランの今後の展望から新規 Issue を作成
+- `/plan [issue-number]` — GitHub Issue を参照して実装プランを作成し、ローカルファイルとして出力する
+- `/implement [markdown-file-path] [--branch <branch-name>]` — 指定された Markdown（実装プラン等）を読み込み、内容に基づいてコードを実装する
+- `/review [base-branch] [--category <category>] [--full] [--full-codebase]` — コードレビューを実施し、ローカルファイルとして出力する。カテゴリ自動選択・指定に対応
+- `/triage` — Issue の棚卸を一括実行（対応済みクローズ、ラベル付与、マイルストーン平準化、プランからの Issue 作成を順番に実行し、統合レポートを出力）

@@ -1,36 +1,220 @@
 ---
 name: triage
 description: Issue の棚卸を一括実行する。対応済み Issue のクローズ、ラベル付与、マイルストーン平準化、実装プランからの Issue 作成をすべて行い、棚卸レポートを出力する。
-disable-model-invocation: true
 ---
 
 # Issue Triage Skill
 
 GitHub Issue の棚卸を一括で行い、プロジェクトの Issue 管理を整理する。
 
-以下の4つのサブスキルを順番に実行し、最後に統合レポートを出力する。
+4つのステップを順番に実行し、最後に統合レポートを出力する。途中のステップが失敗した場合でも、エラーを記録して次のステップに進むこと。
 
 ## 前提条件
 
 - `gh` CLI が認証済みであること
 
+## 共通の除外ルール
+
+以下は全ステップで操作対象外とする:
+- Renovate が管理する Issue（Dependency Dashboard）
+- bot が自動生成した Issue
+
 ## 手順
 
 ### 1. 対応済み Issue のクローズ
 
-`close-resolved-issues` スキルの手順に従い、対応済みの Issue を検出してクローズする。
+Open な Issue を一覧取得し、それぞれの Issue が既に対応済みかを判定してクローズする。
+
+#### 1-1. Open Issue の取得
+
+```bash
+gh issue list --state open --json number,title,labels,milestone,body --limit 100
+```
+
+#### 1-2. 対応済み判定
+
+各 Issue について以下を確認する:
+
+1. **コードベースの確認**: Issue の要件に対応するコードが既に実装されているかを調査する
+   - 関連するファイル、関数、テストの存在を確認
+   - `git log --oneline --all --grep="#<issue-number>"` で関連コミットを検索
+2. **PR の確認**: Issue に紐づく PR がマージ済みかを確認する
+   ```bash
+   gh pr list --state merged --search "close #<N> OR closes #<N> OR fix #<N> OR fixes #<N> OR resolve #<N> OR resolves #<N>" --json number,title
+   ```
+3. **Issue 内容との照合**: コードベースの現状が Issue の要件を満たしているかを総合的に判断する
+
+#### 1-3. クローズ処理
+
+対応済みと判定した Issue は、理由を添えてクローズする。**判定に迷う場合はクローズしない。**
+
+```bash
+gh issue close <issue-number> --comment "$(cat <<'EOF'
+棚卸によりクローズします。
+
+**対応済みの根拠:**
+- <対応済みと判断した具体的な根拠を記載>
+
+🤖 *Triaged by Claude Code*
+EOF
+)"
+```
+
+`Close: Duplicate` や `Close: WontFix` ラベルが付いた Issue もクローズ対象とする。
+
+#### 1-4. 結果の記録
+
+クローズした Issue の一覧を記録する。対象がない場合は「対応済みの Issue はありませんでした」と記録する。
+
+---
 
 ### 2. 既存 Issue のラベル付与
 
-`label-issues` スキルの手順に従い、ラベル未付与の Issue に種別・優先度ラベルを付与する。
+ラベルが付与されていない既存の Open Issue を特定し、適切なラベルを付与する。
+
+#### 2-1. ラベル未付与 Issue の特定
+
+```bash
+gh issue list --state open --json number,title,labels,body --limit 100 --jq '.[] | select(.labels | length == 0)'
+```
+
+#### 2-2. ラベルの判定と付与
+
+Issue のタイトルと本文を読み、以下のルールに基づいてラベルを判定する。
+
+**種別ラベル（必須・1つ選択）:**
+
+| 内容の種別 | ラベル |
+|-----------|--------|
+| バグ報告・不具合修正 | `Type: Bug` |
+| 新しい機能の追加 | `Type: Feature` |
+| 既存機能の改善・拡張 | `Type: Enhancement` |
+| コードの整理・改善 | `Type: Refactoring` |
+| テストの追加・改善 | `Type: Test` |
+| ドキュメントの追加・改善 | `Type: Document` |
+| リリース作業 | `Type: Publishing` |
+
+**優先度ラベル（必須・1つ選択）:**
+
+| 優先度 | ラベル | 基準 |
+|--------|--------|------|
+| 高 | `Priority: High` | ユーザーに直接影響する、またはバグの温床となりうる |
+| 中 | `Priority: Medium` | 品質向上に寄与するが、緊急性は低い |
+| 低 | `Priority: Low` | あると良いが、なくても問題ない |
+
+- 種別の判断に迷う場合は `Type: Enhancement` をデフォルトとする
+- 優先度の判断に迷う場合は `Priority: Medium` をデフォルトとする
+- ラベルがリポジトリに存在しない場合は付与せず、その旨を記録する
+- 既にラベルが付いている Issue のラベルは変更しない
+
+```bash
+gh issue edit <issue-number> --add-label "<ラベル1>,<ラベル2>"
+```
+
+#### 2-3. 結果の記録
+
+ラベルを付与した Issue の一覧を記録する。
+
+---
 
 ### 3. マイルストーンの平準化
 
-`balance-milestones` スキルの手順に従い、マイルストーン未割り当ての Issue にマイルストーンを紐づけ、平準化する。
+マイルストーン未割り当ての Issue にマイルストーンを紐づけ、偏りがあれば調整・新規作成する。
+
+#### 3-1. 現状の把握
+
+```bash
+gh api repos/:owner/:repo/milestones --jq '.[] | select(.state=="open") | {title, open_issues, closed_issues, due_on}'
+```
+
+#### 3-2. セマンティックバージョニングに基づく分類
+
+**パッチバージョン（`vX.Y.Z` の Z を上げる）:**
+
+| ラベル | ケース |
+|--------|-------|
+| `Type: Bug` | 常にパッチ対象。最も直近のパッチマイルストーンに配置 |
+| `Type: Document` | 誤り・不整合の修正はパッチ対象 |
+
+**マイナーバージョン（`vX.Y.0` の Y を上げる）:**
+
+| ラベル | ケース |
+|--------|-------|
+| `Type: Feature` / `Type: Enhancement` | 機能の規模に応じて適切なマイナーマイルストーンに配置 |
+| `Type: Refactoring` | 大きなリリースの前に配置 |
+| `Type: Document`（新規追加） | 関連する機能と同じマイナーマイルストーン |
+| `Type: Test` | 関連する機能と同じマイルストーン |
+| `Type: Publishing` | リリース作業用のマイルストーン |
+
+#### 3-3. マイルストーンの作成（必要な場合）
+
+- マイルストーン名はセマンティックバージョニング形式: `vX.Y.Z`
+- 既存のマイルストーン一覧（**クローズ済みを含む**）を確認し、次のバージョン番号を決定する
+- 1マイルストーンに Issue が偏りすぎないようにする（目安: 5〜8 Issue）
+
+```bash
+gh api repos/:owner/:repo/milestones --method POST --field title="vX.Y.Z"
+```
+
+#### 3-4. Issue のマイルストーン割り当てと平準化
+
+```bash
+gh issue edit <issue-number> --milestone "vX.Y.Z"
+```
+
+- 1つのマイルストーンに 8 Issue 以上ある場合は、一部を別のマイルストーンに移動する
+- ラベルの種類と依存関係を考慮して、論理的にまとまりのあるグループにする
+
+#### 3-5. 結果の記録
+
+マイルストーンの変更内容を記録する。
+
+---
 
 ### 4. 実装プランの今後の展望からの Issue 作成
 
-`create-issues-from-plans` スキルの手順に従い、実装プランの「今後の展望」から新規 Issue を作成する。
+実装プランの「今後の展望」セクションを読み取り、既存 Issue と重複しないものを新規 Issue として作成する。
+
+#### 4-1. 実装プランの読み込み
+
+`.claude/outputs/plans/` ディレクトリが存在する場合、`PLAN-*.md` ファイルを読み込み、「今後の展望」セクションを抽出する。ディレクトリやファイルが存在しない場合は「実装プランが見つかりませんでした」と記録してスキップする。
+
+#### 4-2. 既存 Issue との重複チェック
+
+```bash
+gh issue list --state all --search "<keyword>" --json number,title,state --limit 50
+```
+
+重複判定: タイトルが同じ、またはほぼ同一の内容を指している場合は重複とみなす。
+
+#### 4-3. 新規 Issue の作成
+
+プランのファイル名 `PLAN-<Issue番号>-<タイトル>.md` から元の Issue 番号を抽出し、紐づける。
+
+```bash
+gh issue create --title "<タイトル>" --label "<種別>,<優先度>" --body "$(cat <<'EOF'
+## 概要
+
+<展望項目の内容を具体的に記述>
+
+## 背景
+
+#<元Issue番号> の実装プランにおける今後の展望から抽出。
+
+---
+🤖 *Created by Claude Code (Issue Triage)*
+EOF
+)"
+```
+
+- 新規 Issue には**必ず**種別ラベルと優先度ラベルを付けること
+- 作成した Issue にはステップ3のルールに従ってマイルストーンも割り当てること
+
+#### 4-4. 結果の記録
+
+作成した Issue の一覧を記録する。
+
+---
 
 ### 5. 棚卸レポートの出力
 
@@ -38,14 +222,13 @@ GitHub Issue の棚卸を一括で行い、プロジェクトの Issue 管理を
 
 - ディレクトリが存在しない場合は作成すること
 - ファイル名: `TRIAGE-YYYY-MM-DD-HHmmss.md`（実行日時のタイムスタンプ）
-  - 例: `TRIAGE-2026-03-13-143025.md`
 
-以下のフォーマットで出力する:
+レポートフォーマット:
 
 ```markdown
-## 📋 Issue 棚卸レポート
+## Issue 棚卸レポート
 
-> 📅 実施日時: YYYY-MM-DD HH:mm:ss
+> 実施日時: YYYY-MM-DD HH:mm:ss
 
 ### クローズした Issue
 
@@ -86,7 +269,6 @@ GitHub Issue の棚卸を一括で行い、プロジェクトの Issue 管理を
 
 ## 注意事項
 
-- 各サブスキルの注意事項に従うこと
 - Issue のクローズは慎重に行うこと。判断に迷う場合はクローズしない
-- Renovate が管理する Issue（Dependency Dashboard）は操作しない
 - すべての操作は `gh` CLI を通じて行う
+- 途中のステップでエラーが発生した場合は、エラー内容をレポートに記録し、次のステップに進む
