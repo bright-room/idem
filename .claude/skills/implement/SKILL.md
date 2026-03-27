@@ -1,35 +1,29 @@
 ---
 name: implement
-description: 指定された Markdown（実装プラン等）を読み込み、内容に基づいてコードを実装する。ローカルではファイルパス指定、CI 環境では Issue コメントの内容を読み取って実装する。
+description: 指定された Markdown（実装プラン等）を読み込み、内容に基づいてコードを実装する。ファイルパスで実装ソースを指定する。
 argument-hint: "[markdown-file-path] [--branch <branch-name>]"
 ---
 
 # Implement Skill
 
-指定されたソース（Markdown ファイルまたは GitHub Issue のコメント）を読み込み、その内容に基づいてコードを実装する。
+指定された Markdown ファイルを読み込み、その内容に基づいてコードを実装する。
 
 ## 前提条件
 
 - `gh` CLI が認証済みであること
+- Docker が起動していること（ビルド・テストは Docker 内で実行される）
+- `make build` で Docker イメージがビルド済みであること
 
 ## 引数
 
 ```
-$ARGUMENTS = [markdown-file-path] [--branch <branch-name>]
+$ARGUMENTS = <markdown-file-path> [--branch <branch-name>]
 ```
 
-- `<markdown-file-path>`: 実装の元となる Markdown ファイルのパス（任意）
+- `<markdown-file-path>`: 実装の元となる Markdown ファイルのパス（必須）
 - `--branch <branch-name>`: 作業ブランチの指定（任意）
 
-### ソースの解決ルール
-
-引数と実行環境に応じて、実装の入力ソースを以下の優先順で決定する:
-
-| 条件 | ソース | 例 |
-|------|--------|-----|
-| 引数がファイルパス（`/` を含む or `.md` で終わる） | 指定された Markdown ファイルを読み込む | `/implement .claude/outputs/plans/PLAN-42-xxx.md` |
-| 引数なし + `CI=true` | 現在の Issue のコメント内容を読み取る | `/implement` |
-| 引数なし + ローカル | エラー（ソースの指定が必要） | — |
+引数なしの場合はエラーとする。
 
 ### ブランチの動作
 
@@ -42,89 +36,33 @@ $ARGUMENTS = [markdown-file-path] [--branch <branch-name>]
 
 ### 1. 引数の解析
 
-```
-ARGUMENTS = "$ARGUMENTS"
-```
-
 - `--branch` オプションがあればブランチ名を取得する
-- 残りの引数からソース種別を判定する（ファイルパス / Issue 番号 / なし）
+- 残りの引数から Markdown ファイルパスを取得する
+- ファイルが存在しない場合はエラーメッセージを出力して終了する
 
-### 2. 実装ソースの取得
-
-ソースの解決ルールに従い、実装内容を取得する。
-
-#### パターン A: ファイルパスが指定された場合
-
-指定された Markdown ファイルを読み込む。ファイルが存在しない場合はエラーメッセージを出力して終了する。
-
-#### パターン B: 引数なし + CI 環境
-
-現在の Issue のコンテキストからソースを取得する。
-
-```bash
-# 現在の Issue 番号を取得（GitHub Actions のコンテキストから）
-ISSUE_NUMBER=${GITHUB_ISSUE_NUMBER:-}
-
-# Issue 番号が取得できない場合
-if [ -z "$ISSUE_NUMBER" ]; then
-  echo "Error: Issue number not found in CI context"
-  exit 1
-fi
-
-# Issue 本文とコメントの取得
-gh issue view ${ISSUE_NUMBER} --json body,title,comments
-```
-
-以下の優先順でソースを特定する:
-
-1. Issue コメントの中から「実装プラン」セクション（`## 実装プラン` で始まるコメント）を検索する
-2. 実装プランコメントが見つからない場合は、Issue 本文を実装ソースとして使用する
-3. トリガーとなったコメント（`@claude /implement` を含むコメント）自体に実装指示が含まれている場合は、そのコメント内容も実装ソースに加味する
-4. いずれも実装可能な内容を含まない場合はエラーメッセージを出力して終了する
-
-### 3. 実装ソースの理解
+### 2. 実装ソースの理解
 
 取得したソースを深く理解する。
 
 - **実装プランの場合**: Phase / Step の構成、対象ファイル、変更内容を把握する
 - **レビュー指摘の場合**: 指摘事項、修正案、対象ファイル・行番号を把握する
-- **Issue 本文の場合**: 要件・仕様を把握し、コードベースを調査した上で実装方針を決定する
 - **その他の Markdown**: 記述された要件・仕様を把握する
 
-### 4. ブランチの準備
+### 3. ブランチの準備
 
 #### `--branch` なしの場合（新規実装）
 
-1. `main` ブランチの最新を取得する
-
-```bash
-git fetch origin main
-git checkout main
-git pull origin main
-```
-
-2. ソースの内容からブランチ名を自動生成する
-   - 実装プランの場合: `feat/<issue-number>-<概要のケバブケース>` の形式
-     - 例: Issue #42 "Add middleware support" → `feat/42-add-middleware-support`
-   - レビュー指摘修正の場合: `fix/<issue-number>-<概要のケバブケース>` の形式
-   - その他: `feat/<概要のケバブケース>` の形式
-
-3. ブランチを作成する
-
-```bash
-git checkout -b <branch-name>
-```
+1. `main` ブランチの最新を取得し、そこから新規ブランチを作成する
+2. ブランチ名はソースの内容から自動生成する:
+   - 実装プランの場合: `feat/<issue-number>-<概要のケバブケース>`（例: `feat/42-add-middleware-support`）
+   - レビュー指摘修正の場合: `fix/<issue-number>-<概要のケバブケース>`
+   - その他: `feat/<概要のケバブケース>`
 
 #### `--branch` ありの場合（既存ブランチでの修正）
 
-1. 指定されたブランチにチェックアウトする
+指定されたブランチにチェックアウトし、最新を pull する。
 
-```bash
-git checkout <branch-name>
-git pull origin <branch-name>
-```
-
-### 5. コードの実装
+### 4. コードの実装
 
 ソースの内容に基づいてコードを実装する。
 
@@ -136,6 +74,7 @@ git pull origin <branch-name>
 - 各ステップの実装後、コンパイルエラーがないことを確認すること
 - **GoDoc コメントは必ず英語で記述すること**（実装プランに日本語で記載されていても英語に翻訳する）
 - **パッケージコメント（`// Package xxx ...`）は `doc.go` に記述すること**（実装ファイルには書かない）
+- **`internal/cmd/genrecorder/` を変更した場合は `go generate ./...` を実行し、`recorder_gen.go` と `recorder_gen_test.go` を再生成してコミットに含めること**
 
 #### 実装の進め方
 
@@ -143,49 +82,55 @@ git pull origin <branch-name>
 2. **テストコードの実装**: ユニットテスト、統合テストの作成
 3. **ドキュメントの更新**: GoDoc コメント、README、CLAUDE.md など（ソースに記載がある場合）
 
-### 6. ビルドとフォーマットの確認
+### 5. ビルドとフォーマットの確認
 
-実装完了後、以下を実行する:
+このプロジェクトは Docker 内でビルド・テストを実行する。すべてのコマンドは `make` 経由で実行すること（内部で `docker compose run --rm dev` を使用）。
 
 ```bash
-# フォーマットの確認と適用
-go fmt ./...
+# コード生成（internal/cmd/genrecorder/ を変更した場合のみ）
+docker compose run --rm dev go generate ./...
 
-# 静的解析
-go vet ./...
+# フォーマット（gofumpt による厳密なフォーマット。go fmt とは結果が異なる）
+make fmt
 
-# ビルドの確認
-go build ./...
+# 静的解析（golangci-lint: errcheck, govet, staticcheck, gocritic, revive 等 11 チェッカー）
+make lint
 
-# テストの実行
-go test ./...
+# ユニットテスト（gotestsum + race detector + coverage）
+make test-unit
+
+# ビルド確認（lint/test で暗黙的にビルドされるが、明示的に確認したい場合）
+docker compose run --rm dev go build ./...
 ```
 
-- `go fmt` は必ずコミット前に実行すること
+- **`go fmt` ではなく `make fmt` を使うこと**。プロジェクトは gofumpt を使用しており、`go fmt` ではフォーマットが不十分で CI が失敗する
+- **`go vet` ではなく `make lint` を使うこと**。golangci-lint は `go vet` の上位互換で、追加の 10 チェッカーを含む
 - ビルドやテストが失敗した場合は原因を特定し修正すること。修正後に再度実行し、成功するまで繰り返す
+- 統合テストは Redis 環境が必要なため、CI に委ねてよい。ローカルで実行する場合は `make test-integration` を使用する
 
-### 7. コミット
+### 6. コミット
 
 変更内容をコミットする。
 
 - コミットメッセージは変更内容を適切に要約すること
 - 実装プランの場合は Issue 番号をコミットメッセージに含めること
-  - 例: `Close #42: Add middleware support`
+  - 例: `feat: add middleware support (#42)`
 - レビュー指摘修正の場合は修正内容を簡潔に記載すること
-  - 例: `Fix review comments: improve error handling and add missing tests`
+  - 例: `fix: improve error handling and add missing tests`
 - 複数の論理的なまとまりがある場合は、適切にコミットを分割すること
+- Co-Authored-By には実行時のモデル情報を使用すること
 
 ```bash
 git add <files>
 git commit -m "$(cat <<'EOF'
 <commit message>
 
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+Co-Authored-By: <実行中のモデル名> <noreply@anthropic.com>
 EOF
 )"
 ```
 
-### 8. Push と PR 作成
+### 7. Push と PR 作成
 
 #### `--branch` なしの場合（新規実装）
 
@@ -195,12 +140,14 @@ EOF
 git push -u origin <branch-name>
 ```
 
-2. PR を作成する
+2. PR を作成する。Issue を紐づける場合は **PR 本文** に `Closes #<issue-number>` を記載する。
 
 ```bash
 gh pr create --title "<PR title>" --body "$(cat <<'EOF'
 ## Summary
 <変更内容の箇条書き>
+
+Closes #<issue-number>
 
 ## Test plan
 <テスト方針のチェックリスト>
@@ -210,19 +157,12 @@ EOF
 )"
 ```
 
-- PR タイトルは Issue を閉じる場合 `Close #<issue-number>: <概要>` の形式にする
 - PR タイトルは 70 文字以内に収めること
-
-3. PR の URL をユーザーに返すこと
+- PR の URL をユーザーに返すこと
 
 #### `--branch` ありの場合（既存ブランチでの修正）
 
 1. リモートに Push する
-
-```bash
-git push origin <branch-name>
-```
-
 2. Push が完了した旨をユーザーに報告すること
 
 ## 注意事項
@@ -231,5 +171,4 @@ git push origin <branch-name>
 - 推測ではなく、実際のコードを読んで確認した事実に基づいて実装すること
 - 実装中に不明点や判断が必要な事項があればユーザーに確認すること
 - ビルドが通らない状態でコミット・Push しないこと
-- `golangci-lint fmt ./...` を忘れずに実行すること
-- CI 環境で Issue 本文から実装する場合は、要件が曖昧な場合に Issue にコメントで確認してから実装を進めること
+- `make fmt` を忘れずに実行すること（`go fmt` ではなく `make fmt`）
