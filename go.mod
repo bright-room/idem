@@ -1,6 +1,6 @@
 module github.com/bright-room/idem
 
-go 1.25.5
+go 1.26.1
 
 require github.com/redis/go-redis/v9 v9.18.0
 
