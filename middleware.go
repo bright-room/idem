@@ -4,6 +4,7 @@ package idem
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 )
 
@@ -17,6 +18,18 @@ type Middleware struct {
 // configuration inspection.
 func (m *Middleware) Config() Config {
 	return m.cfg.snapshot()
+}
+
+// ConfigHandler returns an http.Handler that serves the current middleware
+// configuration as JSON. This is intended for debug endpoints such as
+// /debug/idem/config.
+func (m *Middleware) ConfigHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(m.Config()); err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
+	})
 }
 
 // Handler returns a net/http compatible middleware handler.

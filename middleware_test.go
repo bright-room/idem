@@ -2,6 +2,7 @@ package idem
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -835,6 +836,36 @@ func TestMiddleware_Config(t *testing.T) {
 			t.Error("LockSupported = false, want true for Locker-implementing storage")
 		}
 	})
+}
+
+func TestMiddleware_ConfigHandler(t *testing.T) {
+	t.Parallel()
+
+	mw := newTestMiddleware(t)
+	handler := mw.ConfigHandler()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/debug/idem/config", nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("Content-Type = %q, want %q", ct, "application/json")
+	}
+
+	var got Config
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	want := mw.Config()
+	if got != want {
+		t.Errorf("config = %+v, want %+v", got, want)
+	}
 }
 
 func TestNewResponseRecorder(t *testing.T) {
