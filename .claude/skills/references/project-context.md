@@ -170,6 +170,7 @@ docker compose run --rm dev go build ./...
 | `CLAUDE.md` | コマンド変更・CI 変更 |
 | `.claude/rules/architecture.md` | パッケージ構成変更・インターフェース変更・設計パターン変更 |
 | `.claude/rules/coding.md` | コーディング規約変更 |
+| `.claude/skills/references/project-context.md` | パッケージ構成変更・ビルドコマンド変更・レビュー観点変更 |
 
 ## ラベル・ワークフロー規約
 
