@@ -19,6 +19,12 @@ Idempotency key middleware for Go HTTP applications.
 go get github.com/bright-room/idem
 ```
 
+For Gin framework integration, also install the adapter:
+
+```sh
+go get github.com/bright-room/idem/gin
+```
+
 ## Quick Start
 
 ```go
@@ -374,11 +380,25 @@ The [`_examples`](./_examples) directory contains runnable examples for popular 
 |-----------|:-------------------:|-------------------|--------------|
 | **Chi** | ✅ | None — `mw.Handler()` works directly | `r.Use(idempotency.Handler())` |
 | **Echo** | — | `echo.WrapMiddleware()` built-in adapter | `e.Use(echo.WrapMiddleware(idempotency.Handler()))` |
-| **Gin** | — | Custom `wrapMiddleware()` helper function | `r.POST("/orders", wrap, handler)` |
+| **Gin** | — | `idemgin.WrapMiddleware()` official adapter | `r.POST("/orders", wrap, handler)` |
 
-Chi is a `net/http` compatible router, so `mw.Handler()` works out of the box. Echo provides a built-in `echo.WrapMiddleware()` adapter to convert `func(http.Handler) http.Handler` into Echo middleware. Gin requires a `gin.HandlerFunc` signature, so a custom helper function is needed to wrap the standard middleware.
+Chi is a `net/http` compatible router, so `mw.Handler()` works out of the box. Echo provides a built-in `echo.WrapMiddleware()` adapter to convert `func(http.Handler) http.Handler` into Echo middleware. Gin requires a `gin.HandlerFunc` signature; the `idem/gin` sub-module provides `WrapMiddleware()` to bridge the two.
 
 ### Gin
+
+```go
+import (
+	"github.com/bright-room/idem"
+	idemgin "github.com/bright-room/idem/gin"
+	"github.com/gin-gonic/gin"
+)
+
+mw, _ := idem.New()
+wrap := idemgin.WrapMiddleware(mw)
+
+r := gin.Default()
+r.POST("/orders", wrap, handler)
+```
 
 ```bash
 cd _examples/gin && go run main.go
@@ -395,8 +415,6 @@ curl -X POST http://localhost:8080/orders -H "Idempotency-Key: key-123"
 ```
 
 See [`_examples/gin/main.go`](./_examples/gin/main.go) for the full source including per-endpoint and route-group middleware patterns.
-
-> **Note:** The `wrapMiddleware` helper replaces `c.Writer` with a dual-write adapter (`recorderGinWriter`) so that Gin's `c.JSON()` writes flow through idem's response recorder for caching. On a cache hit, the inner handler is not called and `c.Abort()` is used to stop the Gin handler chain.
 
 ### Echo
 
