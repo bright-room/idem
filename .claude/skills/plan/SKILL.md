@@ -64,7 +64,7 @@ gh api repos/{owner}/{repo}/issues/<issue-number>/comments \
 
 #### 更新（既存プランコメントがある場合）
 
-既存のプランコメントを編集し、最新版に更新する。変更履歴は折りたたみで残す。
+まず既存のプランコメントを PATCH で編集を試みる。変更履歴は折りたたみで残す。
 
 ```bash
 gh api repos/{owner}/{repo}/issues/comments/<comment-id> \
@@ -82,9 +82,13 @@ gh api repos/{owner}/{repo}/issues/comments/<comment-id> \
 </details>
 ```
 
+**PATCH が失敗した場合（MCP 経由等でコメント編集が不可の場合）:**
+
+新規コメントとして投稿する。この場合、同一 Issue に `<!-- claude:plan -->` マーカー付きコメントが複数存在することになるが、常に最新（最後に投稿された）コメントが有効なプランとして扱われる。
+
 #### API エラー時のフォールバック
 
-API 呼び出しが失敗した場合は、ローカルファイルにフォールバック出力する。
+コメントの投稿自体が失敗した場合は、ローカルファイルにフォールバック出力する。
 
 - 出力先: `.claude/outputs/plans/PLAN-<Issue番号>-<Issueタイトルをケバブケースに変換>.md`
 - ユーザーに API エラーが発生した旨と、手動で Issue にコメントをコピーするよう案内する
