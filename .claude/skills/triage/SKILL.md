@@ -134,13 +134,33 @@ gh issue edit <issue-number> --add-label "<ラベル1>,<ラベル2>"
 
 ### 3. 実装プランの今後の展望からの Issue 作成
 
-実装プランの「今後の展望」セクションを読み取り、既存 Issue と重複しないものを新規 Issue として作成する。
+特定マイルストーンに紐づく Issue の実装プラン（「今後の展望」セクション）を読み取り、既存 Issue と重複しないものを新規 Issue として作成する。
 
-#### 3-1. 実装プランの読み込み
+#### 3-0. 対象マイルストーンの決定
 
-Issue コメントに投稿された実装プラン（`<!-- claude:plan -->` マーカー付き）から「今後の展望」セクションを抽出する。
+triage スキルの引数でマイルストーンタイトル（バージョン）が指定されている場合はそのマイルストーンを対象にする。引数がない場合は、最もバージョンが新しいクローズ済みマイルストーンを自動的に対象とする。
 
-Open Issue のコメントを順に確認し、`<!-- claude:plan -->` マーカー付きコメントを検索す��。
+```bash
+# クローズ済みマイルストーン一覧を取得
+gh api repos/{owner}/{repo}/milestones?state=closed --jq '.[].title'
+```
+
+取得したマイルストーン一覧から Semver でソートし、最新バージョンを選択する。
+
+#### 3-1. 対象 Issue の取得
+
+対象マイルストーンに紐づく Issue のうち、**正常にクローズされたもの（Done / Closed / Fixed / Resolved）のみ**を取得する。`Close as not planned`（Won't fix, Can't repro, Stale）や `Close as duplicate` でクローズされた Issue は対象外とする。
+
+```bash
+# マイルストーンに紐づくクローズ済み Issue を取得
+gh issue list --state closed --milestone "<マイルストーンタイトル>" --json number,title,stateReason --limit 100
+```
+
+- `stateReason` が `COMPLETED` の Issue のみを対象とする（`NOT_PLANNED` は除外）
+
+#### 3-2. 実装プランの読み込み
+
+対象 Issue のコメントから `<!-- claude:plan -->` マーカー付きコメントを検索し、「今後の展望」セクションを抽出する。
 
 ```bash
 gh api repos/{owner}/{repo}/issues/<issue-number>/comments \
@@ -149,7 +169,8 @@ gh api repos/{owner}/{repo}/issues/<issue-number>/comments \
 
 - 複数のプランコメントが存在する場合は、最新（最後に投稿された）コメントを採用する
 - 「今後の展望」セクションが含まれないプランはスキップする
-- プランコメントを含む Issue が見つからない場合は「実装プランが見つかりませんでした」と記録してスキップする
+- プランコメントを含む Issue が見つからない場合はスキップする
+- 対象マイルストーンにプランコメントを含む Issue が1つもない場合は「実装プランが見つかりませんでした」と記録してスキップする
 
 #### 3-2. 既存 Issue との重複チェック
 
@@ -302,9 +323,9 @@ gh issue edit <issue-number> --milestone "vX.Y.Z"
 
 ### 新規作成した Issue
 
-| # | タイトル | ラベル | 元プラン |
+| # | タイトル | ラベル | 元 Issue |
 |---|---------|--------|---------|
-| #XX | <タイトル> | <ラベル> | PLAN-XX |
+| #XX | <タイトル> | <ラベル> | #YY |
 
 （対象がない場合は「対象なし」と記載）
 
