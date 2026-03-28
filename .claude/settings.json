@@ -3,11 +3,11 @@
     "bright-room": {
       "source": {
         "source": "github",
-        "repo": "bright-room/claude-dev-workflow"
+        "repo": "bright-room/br-claude-plugins"
       }
     }
   },
   "enabledPlugins": {
-    "claude-dev-workflow@bright-room": true
+    "dev-workflow@bright-room": true
   }
 }
