@@ -36,6 +36,7 @@ Key interfaces:
 - `Validator` — `Validate(Config) error` for configuration validation. `ValidatorFunc` is a function adapter (like `http.HandlerFunc`). Preset validators (`MaxTTL`, `MinTTL`, etc.) return `*PresetValidator` which supports `.WithMessage()` for custom error messages. Composition functions `All` (AND) and `Any` (OR) combine multiple validators and also return `*PresetValidator`.
 
 - `Duration` — `time.Duration` wrapper with human-readable JSON serialization (e.g. `"1h0m0s"` instead of nanoseconds). Used in `Config.TTL`.
+- `ConfigDiff` / `FieldDiff` — `DiffConfig(a, b Config) ConfigDiff` compares two `Config` snapshots and returns structured field-level differences. `HasDiff()` checks for any change; `String()` renders a human-readable summary.
 
 Configuration uses the **Functional Options** pattern (`WithXxx()` functions).
 

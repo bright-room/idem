@@ -76,13 +76,23 @@ func TestDuration_UnmarshalJSON(t *testing.T) {
 			want:  Duration(5 * time.Minute),
 		},
 		{
+			name:  "integer nanoseconds",
+			input: `3600000000000`,
+			want:  Duration(1 * time.Hour),
+		},
+		{
+			name:  "zero nanoseconds",
+			input: `0`,
+			want:  0,
+		},
+		{
 			name:    "invalid string",
 			input:   `"invalid"`,
 			wantErr: true,
 		},
 		{
-			name:    "non-string value",
-			input:   `123`,
+			name:    "boolean value",
+			input:   `true`,
 			wantErr: true,
 		},
 	}

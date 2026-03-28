@@ -216,6 +216,25 @@ http.HandleFunc("/debug/idem/config", func(w http.ResponseWriter, r *http.Reques
 
 The `Config` struct includes JSON tags and implements `fmt.Stringer` for convenient serialization. The `TTL` field uses the `Duration` type, which serializes as a human-readable string (e.g. `"1h0m0s"`) instead of integer nanoseconds.
 
+### Configuration Diff
+
+Use `DiffConfig` to compare two `Config` snapshots and get a structured, human-readable summary of differences:
+
+```go
+old := mw.Config()
+
+// ... reconfigure middleware ...
+new := mw.Config()
+
+diff := idem.DiffConfig(old, new)
+if diff.HasDiff() {
+	log.Printf("config changed:\n%s", diff)
+}
+// Output:
+//   TTL: 24h0m0s → 1h0m0s
+//   StorageType: *idem.MemoryStorage → *redis.Storage
+```
+
 ## Error Handling
 
 `New` returns sentinel errors for invalid configuration, so callers can identify specific error conditions programmatically using `errors.Is`:
