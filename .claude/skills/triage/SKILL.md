@@ -1,13 +1,13 @@
 ---
 name: triage
-description: Issue の棚卸を一括実行する。対応済み Issue のクローズ、ラベル付与、マイルストーン平準化、実装プランからの Issue 作成をすべて行い、棚卸レポートを出力する。
+description: Issue の棚卸を一括実行する。対応済み Issue のクローズ、ラベル付与、実装プランからの Issue 作成、マイルストーン平準化をすべて行い、棚卸レポートを出力する。
 ---
 
 # Issue Triage Skill
 
 GitHub Issue の棚卸を一括で行い、プロジェクトの Issue 管理を整理する。
 
-4つのステップを順番に実行し、最後に統合レポートを出力する。途中のステップが失敗した場合でも、エラーを記録して次のステップに進むこと。
+5つのステップを順番に実行し、最後に統合レポートを出力する。途中のステップが失敗した場合でも、エラーを記録して次のステップに進むこと。
 
 ## 前提条件
 
@@ -70,42 +70,57 @@ EOF
 
 ### 2. 既存 Issue のラベル付与
 
-ラベルが付与されていない既存の Open Issue を特定し、適切なラベルを付与する。
+ラベルが不足している既存の Open Issue を特定し、適切なラベルを付与する。
 
-#### 2-1. ラベル未付与 Issue の特定
+#### 2-1. ラベル不足 Issue の特定
 
 ```bash
-gh issue list --state open --json number,title,labels,body --limit 100 --jq '.[] | select(.labels | length == 0)'
+gh issue list --state open --json number,title,labels,body --limit 100
 ```
+
+結果を確認し、Kind ラベルまたは Priority ラベルが付いていない Issue を対象とする。
 
 #### 2-2. ラベルの判定と付与
 
 Issue のタイトルと本文を読み、以下のルールに基づいてラベルを判定する。
 
-**種別ラベル（必須・1つ選択）:**
+**Kind ラベル（必須・1つ選択）:**
 
 | 内容の種別 | ラベル |
 |-----------|--------|
-| バグ報告・不具合修正 | `Type: Bug` |
-| 新しい機能の追加 | `Type: Feature` |
-| 既存機能の改善・拡張 | `Type: Enhancement` |
-| コードの整理・改善 | `Type: Refactoring` |
-| テストの追加・改善 | `Type: Test` |
-| ドキュメントの追加・改善 | `Type: Document` |
-| リリース作業 | `Type: Publishing` |
+| バグ報告・不具合修正 | `Kind: Bug Fix` |
+| 新しい機能の追加 | `Kind: Feature` |
+| 既存機能の改善・拡張 | `Kind: Enhancement` |
+| コードの整理・改善（API 破壊なし） | `Kind: Refactoring` |
+| テストの追加・改善 | `Kind: Tests` |
+| ドキュメントの追加・改善 | `Kind: Documentation` |
 
-**優先度ラベル（必須・1つ選択）:**
+**Priority ラベル（必須・1つ選択）:**
 
 | 優先度 | ラベル | 基準 |
 |--------|--------|------|
+| 緊急 | `Priority: Critical` | サービス停止や重大なセキュリティ問題 |
 | 高 | `Priority: High` | ユーザーに直接影響する、またはバグの温床となりうる |
 | 中 | `Priority: Medium` | 品質向上に寄与するが、緊急性は低い |
 | 低 | `Priority: Low` | あると良いが、なくても問題ない |
 
-- 種別の判断に迷う場合は `Type: Enhancement` をデフォルトとする
-- 優先度の判断に迷う場合は `Priority: Medium` をデフォルトとする
+**補助ラベル（任意・複数選択可）:**
+
+| 条件 | ラベル |
+|------|--------|
+| 後方互換性が失われる変更 | `Impact: Breaking` |
+| 設計上の議論が必要 | `Need: Discussion` |
+| 他者の協力が必要 | `Need: Help Wanted` |
+
+**判定ルール:**
+
+- Kind の判断に迷う場合は `Kind: Enhancement` をデフォルトとする
+- Priority の判断に迷う場合は `Priority: Medium` をデフォルトとする
+- Issue 本文に「破壊的変更」「後方互換性」「メジャーバージョン」等の記述がある場合は `Impact: Breaking` を付与する
+- Issue 本文に「検討」「議論」「要設計」等の記述があり、実装方針が未確定の場合は `Need: Discussion` を付与する
+- `Need: Discussion` のみで Kind が確定しない場合は Kind ラベルを付与しない
 - ラベルがリポジトリに存在しない場合は付与せず、その旨を記録する
-- 既にラベルが付いている Issue のラベルは変更しない
+- 既に付いているラベルは変更しない
 
 ```bash
 gh issue edit <issue-number> --add-label "<ラベル1>,<ラベル2>"
@@ -117,69 +132,15 @@ gh issue edit <issue-number> --add-label "<ラベル1>,<ラベル2>"
 
 ---
 
-### 3. マイルストーンの平準化
-
-マイルストーン未割り当ての Issue にマイルストーンを紐づけ、偏りがあれば調整・新規作成する。
-
-#### 3-1. 現状の把握
-
-```bash
-gh api repos/:owner/:repo/milestones --jq '.[] | select(.state=="open") | {title, open_issues, closed_issues, due_on}'
-```
-
-#### 3-2. セマンティックバージョニングに基づく分類
-
-**パッチバージョン（`vX.Y.Z` の Z を上げる）:**
-
-| ラベル | ケース |
-|--------|-------|
-| `Type: Bug` | 常にパッチ対象。最も直近のパッチマイルストーンに配置 |
-| `Type: Document` | 誤り・不整合の修正はパッチ対象 |
-
-**マイナーバージョン（`vX.Y.0` の Y を上げる）:**
-
-| ラベル | ケース |
-|--------|-------|
-| `Type: Feature` / `Type: Enhancement` | 機能の規模に応じて適切なマイナーマイルストーンに配置 |
-| `Type: Refactoring` | 大きなリリースの前に配置 |
-| `Type: Document`（新規追加） | 関連する機能と同じマイナーマイルストーン |
-| `Type: Test` | 関連する機能と同じマイルストーン |
-| `Type: Publishing` | リリース作業用のマイルストーン |
-
-#### 3-3. マイルストーンの作成（必要な場合）
-
-- マイルストーン名はセマンティックバージョニング形式: `vX.Y.Z`
-- 既存のマイルストーン一覧（**クローズ済みを含む**）を確認し、次のバージョン番号を決定する
-- 1マイルストーンに Issue が偏りすぎないようにする（目安: 5〜8 Issue）
-
-```bash
-gh api repos/:owner/:repo/milestones --method POST --field title="vX.Y.Z"
-```
-
-#### 3-4. Issue のマイルストーン割り当てと平準化
-
-```bash
-gh issue edit <issue-number> --milestone "vX.Y.Z"
-```
-
-- 1つのマイルストーンに 8 Issue 以上ある場合は、一部を別のマイルストーンに移動する
-- ラベルの種類と依存関係を考慮して、論理的にまとまりのあるグループにする
-
-#### 3-5. 結果の記録
-
-マイルストーンの変更内容を記録する。
-
----
-
-### 4. 実装プランの今後の展望からの Issue 作成
+### 3. 実装プランの今後の展望からの Issue 作成
 
 実装プランの「今後の展望」セクションを読み取り、既存 Issue と重複しないものを新規 Issue として作成する。
 
-#### 4-1. 実装プランの読み込み
+#### 3-1. 実装プランの読み込み
 
 `.claude/outputs/plans/` ディレクトリが存在する場合、`PLAN-*.md` ファイルを読み込み、「今後の展望」セクションを抽出する。ディレクトリやファイルが存在しない場合は「実装プランが見つかりませんでした」と記録してスキップする。
 
-#### 4-2. 既存 Issue との重複チェック
+#### 3-2. 既存 Issue との重複チェック
 
 ```bash
 gh issue list --state all --search "<keyword>" --json number,title,state --limit 50
@@ -187,12 +148,12 @@ gh issue list --state all --search "<keyword>" --json number,title,state --limit
 
 重複判定: タイトルが同じ、またはほぼ同一の内容を指している場合は重複とみなす。
 
-#### 4-3. 新規 Issue の作成
+#### 3-3. 新規 Issue の作成
 
 プランのファイル名 `PLAN-<Issue番号>-<タイトル>.md` から元の Issue 番号を抽出し、紐づける。
 
 ```bash
-gh issue create --title "<タイトル>" --label "<種別>,<優先度>" --body "$(cat <<'EOF'
+gh issue create --title "<タイトル>" --label "<Kind>,<Priority>" --body "$(cat <<'EOF'
 ## 概要
 
 <展望項目の内容を具体的に記述>
@@ -207,12 +168,94 @@ EOF
 )"
 ```
 
-- 新規 Issue には**必ず**種別ラベルと優先度ラベルを付けること
-- 作成した Issue にはステップ3のルールに従ってマイルストーンも割り当てること
+- 新規 Issue には**必ず** Kind ラベルと Priority ラベルを付けること
+- 補助ラベル（`Impact: Breaking`, `Need: Discussion`）も該当する場合は付与すること
+- **マイルストーンはこの時点ではアタッチしない**（Step 4 で一括処理するため）
 
-#### 4-4. 結果の記録
+#### 3-4. 結果の記録
 
 作成した Issue の一覧を記録する。
+
+---
+
+### 4. マイルストーンの平準化
+
+全 Open Issue（既存 + Step 3 で新規作成したもの）を対象に、マイルストーンの割り当てと平準化を行う。
+
+#### 4-1. 現状の把握
+
+```bash
+gh api repos/:owner/:repo/milestones?state=all --jq '.[] | {title, state, open_issues, closed_issues}'
+```
+
+#### 4-2. Semver ルールに基づく分類
+
+Kind と Impact ラベルの組み合わせでバージョン区分を決定する。
+
+**Patch (x.y.Z):**
+
+| ラベル | ケース |
+|--------|-------|
+| `Kind: Bug Fix` | 常にパッチ対象 |
+| `Kind: Tests` | テスト追加・改善 |
+| `Kind: Documentation` | ドキュメント追加・改善 |
+
+**Minor (x.Y.0):**
+
+| ラベル | ケース |
+|--------|-------|
+| `Kind: Feature` | 新機能の追加 |
+| `Kind: Enhancement` | 既存機能の改善・拡張 |
+| `Kind: Refactoring` | 内部的なリファクタリング |
+| `Impact: Breaking` + `Kind: Bug Fix` | 構造上の問題に起因するバグ修正（低頻度） |
+
+**Major (X.0.0):**
+
+| ラベル | ケース |
+|--------|-------|
+| `Impact: Breaking` + `Kind: Feature` | 破壊的変更を伴う新機能 |
+| `Impact: Breaking` + `Kind: Enhancement` | 破壊的変更を伴う機能改善 |
+| `Impact: Breaking` + `Kind: Refactoring` | 破壊的変更を伴うリファクタリング |
+
+**マイルストーン割り当て対象外:**
+
+- Kind ラベルが付いていない Issue（`Need: Discussion` のみ等）
+- Dependency Dashboard
+
+#### 4-3. Priority に基づくマイルストーン配置
+
+同一バージョン区分（Patch/Minor/Major）内で、Priority によって配置するマイルストーンの位置を決定する。
+
+| Priority | 配置位置 |
+|----------|---------|
+| `Priority: Critical` | 最も直近のマイルストーン |
+| `Priority: High` | 直近のマイルストーン |
+| `Priority: Medium` | 中間のマイルストーン |
+| `Priority: Low` | 後方のマイルストーン |
+
+#### 4-4. マイルストーンの作成（必要な場合）
+
+- 既存のマイルストーン一覧（**クローズ済みを含む**）を確認し、次のバージョン番号を決定する
+- バージョン区分に対応するマイルストーンが不足している場合は新設する
+- 1マイルストーンに Issue が偏りすぎないようにする（目安: 5〜8 Issue）
+
+```bash
+gh api repos/:owner/:repo/milestones --method POST --field title="vX.Y.Z"
+```
+
+#### 4-5. Issue のマイルストーン割り当て
+
+```bash
+gh issue edit <issue-number> --milestone "vX.Y.Z"
+```
+
+- マイルストーン未割り当ての Issue を対象に割り当てる
+- 既にマイルストーンが割り当てられている Issue は、Semver ルールと Priority に照らして不整合がない限り変更しない
+- 不整合がある場合（例: Patch 区分の Issue が Minor マイルストーンに入っている）は適切なマイルストーンに移動する
+
+#### 4-6. 結果の記録
+
+マイルストーンの変更内容を記録する。
 
 ---
 
@@ -246,6 +289,14 @@ EOF
 
 （対象がない場合は「対象なし」と記載）
 
+### 新規作成した Issue
+
+| # | タイトル | ラベル | 元プラン |
+|---|---------|--------|---------|
+| #XX | <タイトル> | <ラベル> | PLAN-XX |
+
+（対象がない場合は「対象なし」と記載）
+
 ### マイルストーンの変更
 
 | # | タイトル | 変更前 | 変更後 |
@@ -253,12 +304,6 @@ EOF
 | #XX | <タイトル> | <旧マイルストーン or なし> | <新マイルストーン> |
 
 新規作成したマイルストーン: <あれば記載>
-
-### 新規作成した Issue
-
-| # | タイトル | ラベル | マイルストーン | 元プラン |
-|---|---------|--------|---------------|---------|
-| #XX | <タイトル> | <ラベル> | <マイルストーン> | PLAN-XX |
 
 ### 棚卸後のマイルストーン状況
 
