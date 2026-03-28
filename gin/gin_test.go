@@ -222,7 +222,7 @@ func TestWrapMiddleware_WriteHeaderNow(t *testing.T) {
 	r.POST("/orders", idemgin.WrapMiddleware(mw), func(c *gin.Context) {
 		c.Writer.WriteHeaderNow()
 		capturedStatus = c.Writer.Status()
-		c.Writer.Write([]byte(`{"ok":true}`))
+		_, _ = c.Writer.Write([]byte(`{"ok":true}`))
 	})
 
 	w := httptest.NewRecorder()

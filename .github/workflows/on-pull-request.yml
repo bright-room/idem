@@ -59,9 +59,7 @@ jobs:
         if: always()
         with:
           name: Unit Test Report
-          path: |
-            unit-test-report.xml
-            gin-test-report.xml
+          path: "*-test-report.xml"
           reporter: java-junit
 
       - name: Coverage Report
