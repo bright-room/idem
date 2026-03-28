@@ -38,6 +38,8 @@ Key interfaces:
 - `Duration` — `time.Duration` wrapper with human-readable JSON serialization (e.g. `"1h0m0s"` instead of nanoseconds). Used in `Config.TTL`.
 - `ConfigDiff` / `FieldDiff` — `DiffConfig(a, b Config) ConfigDiff` compares two `Config` snapshots and returns structured field-level differences. `HasDiff()` checks for any change; `String()` renders a human-readable summary.
 
+The `responseRecorder` implements `Unwrap() http.ResponseWriter`, enabling `http.ResponseController` to traverse the wrapper chain and discover interfaces (e.g. `SetReadDeadline`, `SetWriteDeadline`) on the underlying writer.
+
 Configuration uses the **Functional Options** pattern (`WithXxx()` functions).
 
 ## Conventions

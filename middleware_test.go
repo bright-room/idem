@@ -1136,6 +1136,63 @@ func TestNewResponseRecorder(t *testing.T) {
 			t.Error("http.Flusher was not available inside handler")
 		}
 	})
+
+	t.Run("implements Unwrap returning the underlying ResponseWriter", func(t *testing.T) {
+		t.Parallel()
+
+		inner := httptest.NewRecorder()
+		pw := &plainWriter{ResponseWriter: inner}
+		rec := newResponseRecorder(pw)
+
+		type unwrapper interface {
+			Unwrap() http.ResponseWriter
+		}
+
+		u, ok := rec.(unwrapper)
+		if !ok {
+			t.Fatal("recorder does not implement Unwrap()")
+		}
+
+		if got := u.Unwrap(); got != pw {
+			t.Errorf("Unwrap() = %v, want %v", got, pw)
+		}
+	})
+
+	t.Run("implements Unwrap on variant with delegated interfaces", func(t *testing.T) {
+		t.Parallel()
+
+		inner := &flusherHijackerReaderFromWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(inner)
+
+		type unwrapper interface {
+			Unwrap() http.ResponseWriter
+		}
+
+		u, ok := rec.(unwrapper)
+		if !ok {
+			t.Fatal("recorder does not implement Unwrap()")
+		}
+
+		if got := u.Unwrap(); got != inner {
+			t.Errorf("Unwrap() = %v, want %v", got, inner)
+		}
+	})
+
+	t.Run("ResponseController can traverse Unwrap to find Flusher", func(t *testing.T) {
+		t.Parallel()
+
+		fw := &flusherWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(fw)
+
+		rc := http.NewResponseController(rec)
+		if err := rc.Flush(); err != nil {
+			t.Errorf("ResponseController.Flush() error = %v", err)
+		}
+
+		if !fw.flushed {
+			t.Error("Flush() was not delegated via ResponseController")
+		}
+	})
 }
 
 // newTestMiddleware creates a Middleware with default options, failing the test on error.
