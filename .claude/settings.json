@@ -8,6 +8,6 @@
     }
   },
   "enabledPlugins": {
-    "dev-workflow@bright-room": true
+    "dev-workflow@br-claude-plugins": true
   }
 }
