@@ -293,10 +293,43 @@ gh issue edit <issue-number> --milestone "vX.Y.Z"
 
 ### 5. 棚卸レポートの出力
 
-棚卸の結果を `.claude/outputs/triage/` ディレクトリにファイルとして出力する。
+棚卸の結果を GitHub Discussions に投稿する。
 
-- ディレクトリが存在しない場合は作成すること
-- ファイル名: `TRIAGE-YYYY-MM-DD-HHmmss.md`（実行日時のタイムスタンプ）
+#### 5-1. Discussions カテゴリの取得
+
+「Triage Reports」カテゴリの ID を取得する。
+
+```bash
+gh api graphql -f query='
+{
+  repository(owner: "{owner}", name: "{repo}") {
+    discussionCategories(first: 25) {
+      nodes { id, name }
+    }
+  }
+}' --jq '.data.repository.discussionCategories.nodes[] | select(.name == "Triage Reports") | .id'
+```
+
+カテゴリが見つからない場合は、ローカルファイル（`.claude/outputs/triage/TRIAGE-YYYY-MM-DD-HHmmss.md`）にフォールバック出力し、ユーザーに Discussions の「Triage Reports」カテゴリの作成を案内する。
+
+#### 5-2. Discussion の投稿
+
+```bash
+gh api graphql -f query='
+mutation {
+  createDiscussion(input: {
+    repositoryId: "<repository-id>",
+    categoryId: "<category-id>",
+    title: "Issue 棚卸レポート YYYY-MM-DD",
+    body: "<レポート本文>"
+  }) {
+    discussion { url }
+  }
+}'
+```
+
+- `repositoryId` は `gh api repos/{owner}/{repo} --jq .node_id` で取得する
+- 投稿後、Discussion の URL をユーザーに返すこと
 
 レポートフォーマット:
 
