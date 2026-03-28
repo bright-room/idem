@@ -297,7 +297,10 @@ gh issue edit <issue-number> --milestone "vX.Y.Z"
 
 #### 5-1. Discussions カテゴリの取得
 
-「Triage Reports」カテゴリの ID を取得する。
+Discussions カテゴリを以下の優先順で選択する:
+
+1. 「Triage Reports」カテゴリが存在すればそれを使用
+2. なければ「General」カテゴリにフォールバック
 
 ```bash
 gh api graphql -f query='
@@ -307,10 +310,10 @@ gh api graphql -f query='
       nodes { id, name }
     }
   }
-}' --jq '.data.repository.discussionCategories.nodes[] | select(.name == "Triage Reports") | .id'
+}'
 ```
 
-カテゴリが見つからない場合は、ローカルファイル（`.claude/outputs/triage/TRIAGE-YYYY-MM-DD-HHmmss.md`）にフォールバック出力し、ユーザーに Discussions の「Triage Reports」カテゴリの作成を案内する。
+結果から「Triage Reports」を検索し、見つからなければ「General」を使用する。どちらも見つからない場合（Discussions 未有効化）は、ローカルファイル（`.claude/outputs/triage/TRIAGE-YYYY-MM-DD-HHmmss.md`）にフォールバック出力する。
 
 #### 5-2. Discussion の投稿
 

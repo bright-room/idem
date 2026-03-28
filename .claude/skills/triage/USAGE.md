@@ -85,7 +85,7 @@ Kind と Impact の組み合わせでバージョン区分を決定:
 ## 前提条件
 
 - `gh` CLI が認証済みであること
-- GitHub Discussions が有効で「Triage Reports」カテゴリが存在すること（なければローカルファイルにフォールバック）
+- GitHub Discussions が有効であること（「Triage Reports」カテゴリがあればそこに、なければ「General」に投稿。Discussions 未有効化の場合はローカルファイルにフォールバック）
 
 ## 定義ファイル
 
