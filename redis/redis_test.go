@@ -504,6 +504,32 @@ func sentinelMasterAddr(t *testing.T, sentinelAddr, masterName string) string {
 	return addr[0] + ":" + addr[1]
 }
 
+// waitForReplica polls the Sentinel until at least one replica is available for the given master.
+func waitForReplica(t *testing.T, sentinelAddr, masterName string, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		sentinel := goredis.NewSentinelClient(&goredis.Options{
+			Addr: sentinelAddr,
+		})
+		replicas, err := sentinel.Replicas(context.Background(), masterName).Result()
+		_ = sentinel.Close()
+
+		if err == nil && len(replicas) > 0 {
+			for _, r := range replicas {
+				flags := r["flags"]
+				if !strings.Contains(flags, "s_down") && !strings.Contains(flags, "o_down") {
+					return
+				}
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	t.Fatalf("no replica available within %v", timeout)
+}
+
 // waitForFailover polls the Sentinel until the master address changes from originalAddr.
 // It returns the new master address.
 func waitForFailover(t *testing.T, sentinelAddr, masterName, originalAddr string, timeout time.Duration) string {
@@ -687,6 +713,9 @@ func TestIntegration_SentinelFailover_DuringTransition(t *testing.T) {
 
 	originalMasterAddr := sentinelMasterAddr(t, sentinelAddrs[0], masterName)
 	t.Logf("original master: %s", originalMasterAddr)
+
+	// Wait for a replica to be available (previous failover test may have left the topology recovering)
+	waitForReplica(t, sentinelAddrs[0], masterName, 30*time.Second)
 
 	// Trigger failover
 	sentinel := goredis.NewSentinelClient(&goredis.Options{
