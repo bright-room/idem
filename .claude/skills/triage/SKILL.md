@@ -138,7 +138,18 @@ gh issue edit <issue-number> --add-label "<ラベル1>,<ラベル2>"
 
 #### 3-1. 実装プランの読み込み
 
-`.claude/outputs/plans/` ディレクトリが存在する場合、`PLAN-*.md` ファイルを読み込み、「今後の展望」セクションを抽出する。ディレクトリやファイルが存在しない場合は「実装プランが見つかりませんでした」と記録してスキップする。
+Issue コメントに投稿された実装プラン（`<!-- claude:plan -->` マーカー付き）から「今後の展望」セクションを抽出する。
+
+Open Issue のコメントを順に確認し、`<!-- claude:plan -->` マーカー付きコメントを検索す��。
+
+```bash
+gh api repos/{owner}/{repo}/issues/<issue-number>/comments \
+  --jq '.[] | select(.body | contains("<!-- claude:plan -->"))'
+```
+
+- 複数のプランコメントが存在する場合は、最新（最後に投稿された）コメントを採用する
+- 「今後の展望」セクションが含まれないプランはスキップする
+- プランコメントを含む Issue が見つからない場合は「実装プランが見つかりませんでした」と記録してスキップする
 
 #### 3-2. 既存 Issue との重複チェック
 
@@ -150,7 +161,7 @@ gh issue list --state all --search "<keyword>" --json number,title,state --limit
 
 #### 3-3. 新規 Issue の作成
 
-プランのファイル名 `PLAN-<Issue番号>-<タイトル>.md` から元の Issue 番号を抽出し、紐づける。
+プランコメントが投稿されている Issue の番号を元 Issue として紐づける。
 
 ```bash
 gh issue create --title "<タイトル>" --label "<Kind>,<Priority>" --body "$(cat <<'EOF'
