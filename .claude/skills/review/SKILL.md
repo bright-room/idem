@@ -1,12 +1,12 @@
 ---
 name: review
-description: コードレビューを実施する。ブランチ差分または main 全体のレビューを行い、ローカルファイルとして出力する。
-argument-hint: "[base-branch] [--category <category>] [--full] [--full-codebase]"
+description: PR 番号を指定してコードレビューを実施し、インラインコメントとして投稿する。コードベース全体のレビューも可能（ローカル出力）。
+argument-hint: "<pr-number> [--category <category>] [--full]"
 ---
 
 # Code Review Skill
 
-コードレビューを実施し、構造化された Markdown レポートとして出力すること。
+PR に対してコードレビューを実施し、指摘事項をインラインコメントとして GitHub 上に投稿する。コードベース全体レビューの場合はローカルファイルとして出力する。
 
 ## レビュー方針
 
@@ -15,16 +15,20 @@ argument-hint: "[base-branch] [--category <category>] [--full] [--full-codebase]
 - 書き始める前に深く考察し、すべての箇所を漏れなくチェックすること
 - 事実に基づかない内容（ハルシネーション）を含めないこと
 
+## 前提条件
+
+- `gh` CLI が認証済みであること
+
 ## レビューモードの解決ルール
 
-現在のブランチと引数に応じて、レビューモードを以下の優先順で決定する:
+引数に応じて、レビューモードを以下の優先順で決定する:
 
-| 条件 | モード | レビュー対象 |
-|------|--------|-------------|
-| `--full-codebase` 指定 | **コードベース全体レビュー** | main ブランチの全コード |
-| 現在のブランチが `main` 以外 + 引数なし | **main との差分レビュー** | `main` との差分 |
-| 現在のブランチが `main` 以外 + ブランチ指定 | **指定ブランチとの差分レビュー** | 指定ブランチとの差分 |
-| 現在のブランチが `main` + 引数なし | **コードベース全体レビュー** | main ブランチの全コード |
+| 条件 | モード | レビュー対象 | 出力先 |
+|------|--------|-------------|--------|
+| PR 番号を指定（数値のみ） | **PR レビュー** | PR の差分 | GitHub インラインコメント |
+| `--full-codebase` 指定 | **コードベース全体レビュー** | main ブランチの全コード | ローカルファイル |
+
+PR 番号が指定された場合は必ず PR レビューモードとなる。
 
 ## カテゴリ選択ルール
 
@@ -35,27 +39,27 @@ argument-hint: "[base-branch] [--category <category>] [--full] [--full-codebase]
 | `--full` 指定 | 全6カテゴリ |
 | `--category` 指定 | 指定されたカテゴリのみ |
 | コードベース全体レビュー | 全6カテゴリ |
-| 差分レビュー（カテゴリ指定なし） | **変更ファイルから自動選択**（後述） |
+| PR レビュー（カテゴリ指定なし） | **変更ファイルから自動選択**（後述） |
 
-### 変更ファイルからのカテゴリ自動選択（差分レビュー時のデフォルト）
+### 変更ファイルからのカテゴリ自動選択（PR レビュー時のデフォルト）
 
 変更されたファイルのパスに基づいて、レビューするカテゴリを自動で絞り込む。
 
 | 変更ファイルのパスパターン | 選択されるカテゴリ |
 |--------------------------|-------------------|
-| `idem.go`, `option.go`, `locker.go`, `storage.go`, `response.go`, `middleware.go` | アーキテクチャ, プロダクトコード |
-| `errors.go`, `validator.go`, `metrics.go` | プロダクトコード |
+| ルート `*.go`（`*_test.go`, `doc.go`, `*_gen.go` を除く） | プロダクトコード |
+| 上記のうち公開インターフェース定義（`idem.go`, `storage.go`, `locker.go`, `middleware.go`, `option.go`） | + アーキテクチャ |
 | `internal/` | プロダクトコード |
-| `redis/` | プロダクトコード, セキュリティ |
-| `recorder_gen.go`, `recorder_gen_test.go` | プロダクトコード（生成コード — 生成元との同期を確認） |
+| `redis/`, `gin/`（サブモジュール） | プロダクトコード, セキュリティ |
+| `*_gen.go`, `*_gen_test.go` | プロダクトコード（生成コード — 生成元との同期を確認） |
 | `*_test.go` | テストコード |
 | `go.mod`, `go.sum`, `.golangci.yml`, `Makefile`, `Dockerfile`, `compose.yml` | ビルド・設定 |
-| `doc.go`, `redis/doc.go` | ドキュメント |
-| `*.md`, `CLAUDE.md`, `README.md`（`.claude/` 配下を除く） | ドキュメント |
+| `**/doc.go` | ドキュメント |
+| `*.md`（`.claude/` 配下を除く） | ドキュメント |
 | `.claude/skills/`, `.claude/rules/` | ドキュメント |
 
 - 1つのファイルが複数カテゴリにマッチする場合はすべて選択する
-- **プロダクトコード**は差分レビュー時に常に含める（最低1カテゴリ）
+- **プロダクトコード**は PR レビュー時に常に含める（最低1カテゴリ）
 
 ### 使用可能なカテゴリ名
 
@@ -74,25 +78,59 @@ argument-hint: "[base-branch] [--category <category>] [--full] [--full-codebase]
 
 ### 1. レビュー対象の特定
 
-まず現在のブランチを確認する:
-```bash
-git branch --show-current
-```
+#### モード A: PR レビュー
 
-#### モード A: 差分レビュー
+引数に PR 番号が指定された場合。
 
-現在のブランチが `main` 以外の場合のデフォルト動作。
-
-引数から `--category`, `--full`, `--full-codebase` フラグを除いた残りをベースブランチとする。残りが空の場合は `main` をベースブランチとする。
+##### 1-1. PR 情報の取得
 
 ```bash
-# フラグを除いた残りがベースブランチ（なければ main）
-git diff ${BASE_BRANCH}...HEAD --name-only
-git diff ${BASE_BRANCH}...HEAD
-git log ${BASE_BRANCH}...HEAD --oneline
+# PR のベースブランチと最新コミット SHA を取得
+gh pr view <pr-number> --json baseRefName,headRefOid,headRefName
+
+# PR で変更されたファイル一覧を取得
+gh api repos/{owner}/{repo}/pulls/<pr-number>/files --jq '.[].filename'
 ```
 
-#### モード B: コードベース全体レビュー（`--full-codebase` 指定、または main ブランチ上で引数なし）
+##### 1-2. レビュー済み判定と差分取得
+
+前回レビュー以降の変更分のみをレビュー対象にする。
+
+```bash
+# 過去のレビュー一覧を取得
+gh api repos/{owner}/{repo}/pulls/<pr-number>/reviews
+```
+
+- 自身（claude）の最新レビューの `commit_id`（レビュー時点の HEAD SHA）を特定する
+- 自身のレビューが見つかった場合: `git diff <前回レビューSHA>..<現在のHEAD SHA>` で新規変更分のみを差分として取得する
+- 自身のレビューが見つからない場合（初回レビュー）: ベースブランチからの全差分を対象とする
+
+##### 1-3. Resolved 済みスレッドの除外
+
+GraphQL API で Resolved 済みのレビュースレッドを取得し、既に解決済みの指摘を再度行わないようにする。
+
+```bash
+gh api graphql -f query='
+{
+  repository(owner: "{owner}", name: "{repo}") {
+    pullRequest(number: <pr-number>) {
+      reviewThreads(first: 100) {
+        nodes {
+          isResolved
+          comments(first: 10) {
+            nodes { body, path, line }
+          }
+        }
+      }
+    }
+  }
+}'
+```
+
+- `isResolved: true` のスレッドに含まれる指摘は、同じ内容を再度指摘しない
+- bot コメント（CI 等）も除外する
+
+#### モード B: コードベース全体レビュー（`--full-codebase` 指定）
 
 - リポジトリ内のすべての Go ソースファイル（`*.go`）を読み込む
 - テストファイル、設定ファイル（`go.mod`、`.golangci.yml` 等）、ドキュメントも対象とする
@@ -147,31 +185,98 @@ git log ${BASE_BRANCH}...HEAD --oneline
 
 ### 5. レビュー結果の出力
 
-以下のフォーマットに従ってレビュー結果を生成する。**選択されたカテゴリのセクションのみ出力する。**
+#### モード A: PR レビュー — GitHub インラインコメントとして投稿
+
+指摘事項を GitHub PR レビューとして1回の API コールで投稿する。
+
+```bash
+gh api repos/{owner}/{repo}/pulls/<pr-number>/reviews \
+  --method POST \
+  --input /tmp/review-payload.json
+```
+
+レビューペイロードの構造:
+
+```json
+{
+  "commit_id": "<PR の最新コミット SHA>",
+  "body": "<!-- claude:review -->\n<レビュー総括コメント>",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "src/main.go",
+      "line": 42,
+      "side": "RIGHT",
+      "body": "**[Critical]** <指摘内容>\n\n**背景**: <なぜ問題なのか>\n\n**修正案**:\n```go\n// 修正コード\n```"
+    }
+  ]
+}
+```
+
+##### event の選択基準
+
+| 条件 | event |
+|------|-------|
+| Critical の指摘がある | `REQUEST_CHANGES` |
+| High 以下の指摘のみ | `COMMENT` |
+| 指摘なし | `APPROVE` |
+
+##### 総括コメントのフォーマット
+
+```markdown
+<!-- claude:review -->
+## Code Review 総括
+
+> レビュー日: YYYY-MM-DD
+> レビューカテゴリ: <選択されたカテゴリ一覧>
+
+### 総合評価
+
+| 観点 | 評価 |
+|------|------|
+| <カテゴリ名> | ⭐⭐⭐⭐☆ |
+
+### 指摘サマリ
+
+| # | 優先度 | カテゴリ | 概要 |
+|---|--------|----------|------|
+| 1 | 🔴 Critical | <カテゴリ> | <概要> |
+| 2 | 🟠 High | <カテゴリ> | <概要> |
+
+---
+🤖 *Reviewed by Claude Code*
+```
+
+##### インラインコメントの記述ルール
+
+- 各コメントの先頭に優先度バッジを付ける: `**[Critical]**`, `**[High]**`, `**[Medium]**`, `**[Low]**`
+- 背景（なぜ問題なのか）を必ず含める
+- 修正案がある場合はコード例を含める
+- `commit_id` には `gh pr view <pr-number> --json headRefOid --jq .headRefOid` で取得した最新コミット SHA を指定すること（行番号のズレを防ぐため）
+
+##### API エラー時のフォールバック
+
+API 呼び出しが失敗した場合は、ローカルファイルにフォールバック出力する。
+
+- 出力先: `.claude/outputs/reviews/REVIEW-PR-<pr-number>.md`
+- ユーザーに API エラーが発生した旨を報告する
+
+#### モード B: コードベース全体レビュー — ローカルファイルとして出力
 
 レビュー結果を `.claude/outputs/reviews/` ディレクトリにファイルとして出力する。
 
 - ディレクトリが存在しない場合は作成すること
-- ファイル名:
-  - モード A: `REVIEW-<現在のブランチ名（スラッシュをハイフンに変換）>.md`
-    - 例: ブランチ `feature/add-middleware` → `REVIEW-feature-add-middleware.md`
-  - モード B: `REVIEW-main-YYYY-MM-DD.md`
-    - 例: `REVIEW-main-2026-03-28.md`
+- ファイル名: `REVIEW-main-YYYY-MM-DD.md`
 
-## レビュー結果フォーマット
+以下のフォーマットに従ってレビュー結果を生成する。**選択されたカテゴリのセクションのみ出力する。**
 
 ````markdown
-# Code Review: <ブランチ名>
+# Code Review: main
 
 > レビュー日: YYYY-MM-DD
-> ベースブランチ: `<base-branch>`
-> 対象ブランチ: `<current-branch>`
-> レビュー対象コミット: <コミットハッシュ一覧>
 > レビューカテゴリ: <選択されたカテゴリ一覧>
 
 ## 総合評価
-
-<!-- 選択されたカテゴリのみ評価行を出力 -->
 
 | 観点 | 評価 |
 |------|------|
@@ -179,25 +284,7 @@ git log ${BASE_BRANCH}...HEAD --oneline
 
 ---
 
-## レビューサマリ
-
-### 指摘事項一覧
-
-| # | 優先度 | カテゴリ | タイトル | 概要 |
-|---|--------|----------|----------|------|
-| C-1 | 🔴 Critical | <カテゴリ> | <タイトル> | <概要> |
-| H-1 | 🟠 High | <カテゴリ> | <タイトル> | <概要> |
-
-### 対応チェックリスト
-
-- [ ] C-1: <タイトル>
-- [ ] H-1: <タイトル>
-
----
-
 ## <カテゴリ名>レビュー
-
-<!-- 選択されたカテゴリのセクションのみ出力。指摘がないセクションは「指摘なし」と記載 -->
 
 ### 🔴 Critical
 
@@ -220,10 +307,6 @@ git log ${BASE_BRANCH}...HEAD --oneline
 // 修正後のコード例
 ```
 
-##### C-1-1: <関連する修正すべき詳細>
-
-> 📍 [`path/to/file.go:55`](path/to/file.go#L55)
-
 ---
 
 ### 🟠 High
@@ -232,9 +315,6 @@ git log ${BASE_BRANCH}...HEAD --oneline
 ````
 
 ### セキュリティチェックリスト（security カテゴリ選択時のみ出力）
-
-<!-- このプロジェクトは HTTP ミドルウェアライブラリのため、SQL injection / XSS は対象外。
-     代わりに冪等キー処理・キャッシュ・分散ロック・並行処理に特化したチェックを行う -->
 
 | チェック項目 | 結果 | 備考 |
 |-------------|:----:|------|
@@ -257,10 +337,8 @@ git log ${BASE_BRANCH}...HEAD --oneline
 
 ## 指摘の記述ルール
 
-- 指摘がない優先度セクションは「指摘なし」と記載してスキップすること
-- 項番はレビュー全体で一意になるよう、優先度プレフィックス（C/H/M/L）ごとにグローバル通し番号を付与すること（カテゴリをまたいでも重複させない）
-- コード参照は相対パスで記載し、行番号を含めること
 - 推測ではなく、実際にコードを読んで確認した事実のみを記載すること
-- 良い点（Good practices）があれば、各セクションの冒頭で簡潔に言及すること
+- 良い点（Good practices）があれば、総括コメントで簡潔に言及すること
 - セキュリティレビューでは、推測による脆弱性指摘は行わず、コード上で確認できる事実のみを記載すること
 - ドキュメントレビューでは、ドキュメントの「有無」だけでなく「内容の正確性」も確認すること
+- Resolved 済みのスレッドと同じ内容の指摘は行わないこと
