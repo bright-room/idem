@@ -1136,6 +1136,92 @@ func TestNewResponseRecorder(t *testing.T) {
 			t.Error("http.Flusher was not available inside handler")
 		}
 	})
+
+	t.Run("implements Unwrap returning the underlying ResponseWriter", func(t *testing.T) {
+		t.Parallel()
+
+		inner := httptest.NewRecorder()
+		pw := &plainWriter{ResponseWriter: inner}
+		rec := newResponseRecorder(pw)
+
+		type unwrapper interface {
+			Unwrap() http.ResponseWriter
+		}
+
+		u, ok := rec.(unwrapper)
+		if !ok {
+			t.Fatal("recorder does not implement Unwrap()")
+		}
+
+		if got := u.Unwrap(); got != pw {
+			t.Errorf("Unwrap() = %v, want %v", got, pw)
+		}
+	})
+
+	t.Run("implements Unwrap on variant with delegated interfaces", func(t *testing.T) {
+		t.Parallel()
+
+		inner := &flusherHijackerReaderFromWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(inner)
+
+		type unwrapper interface {
+			Unwrap() http.ResponseWriter
+		}
+
+		u, ok := rec.(unwrapper)
+		if !ok {
+			t.Fatal("recorder does not implement Unwrap()")
+		}
+
+		if got := u.Unwrap(); got != inner {
+			t.Errorf("Unwrap() = %v, want %v", got, inner)
+		}
+	})
+
+	t.Run("ResponseController can flush through recorder variant", func(t *testing.T) {
+		t.Parallel()
+
+		fw := &flusherWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(fw)
+
+		rc := http.NewResponseController(rec)
+		if err := rc.Flush(); err != nil {
+			t.Errorf("ResponseController.Flush() error = %v", err)
+		}
+
+		if !fw.flushed {
+			t.Error("Flush() was not delegated via ResponseController")
+		}
+	})
+
+	t.Run("ResponseController discovers SetReadDeadline via Unwrap", func(t *testing.T) {
+		t.Parallel()
+
+		dw := &deadlineWriter{ResponseWriter: httptest.NewRecorder()}
+		rec := newResponseRecorder(dw)
+
+		rc := http.NewResponseController(rec)
+		if err := rc.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+			t.Errorf("SetReadDeadline() error = %v", err)
+		}
+
+		if !dw.readDeadlineSet {
+			t.Error("SetReadDeadline was not discovered via Unwrap")
+		}
+	})
+}
+
+// deadlineWriter implements http.ResponseWriter and SetReadDeadline,
+// which is not detected by newResponseRecorder and can only be
+// discovered via Unwrap traversal.
+type deadlineWriter struct {
+	http.ResponseWriter
+	readDeadlineSet bool
+}
+
+func (w *deadlineWriter) SetReadDeadline(_ time.Time) error {
+	w.readDeadlineSet = true
+	return nil
 }
 
 // newTestMiddleware creates a Middleware with default options, failing the test on error.

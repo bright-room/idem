@@ -152,6 +152,12 @@ func (r *responseRecorder) flush() {
 	_, _ = r.ResponseWriter.Write(r.body.Bytes())
 }
 
+// Unwrap returns the underlying ResponseWriter, enabling http.ResponseController
+// to traverse the wrapper chain and discover interfaces on the original writer.
+func (r *responseRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
 func writeResponse(w http.ResponseWriter, res *Response) {
 	for k, vals := range res.Header {
 		for _, v := range vals {
