@@ -647,6 +647,210 @@ func TestIntegration_SentinelFailover(t *testing.T) {
 	client.Del(ctx, "idem:lock:"+lockKey)
 }
 
+// --- Cluster-only integration tests ---
+
+// clusterNodeInfo holds the address and role of a Redis Cluster node.
+type clusterNodeInfo struct {
+	Addr     string
+	Role     string // "master" or "slave"
+	NodeID   string
+	MasterID string // node ID of the master (for replicas only)
+}
+
+// parseClusterNodes parses the output of CLUSTER NODES into structured node info.
+func parseClusterNodes(raw string) []clusterNodeInfo {
+	var nodes []clusterNodeInfo
+	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 8 {
+			continue
+		}
+
+		// addr field is "ip:port@cport" — strip the @cport part
+		addr := fields[1]
+		if idx := strings.Index(addr, "@"); idx != -1 {
+			addr = addr[:idx]
+		}
+
+		// flags field may contain multiple comma-separated flags (e.g. "myself,master")
+		flags := fields[2]
+		role := "unknown"
+		if strings.Contains(flags, "master") {
+			role = "master"
+		} else if strings.Contains(flags, "slave") {
+			role = "slave"
+		}
+
+		nodes = append(nodes, clusterNodeInfo{
+			Addr:     addr,
+			Role:     role,
+			NodeID:   fields[0],
+			MasterID: fields[3],
+		})
+	}
+	return nodes
+}
+
+// clusterFindReplicaPair returns a master and its replica from the cluster topology.
+// It fails the test if no master has a replica.
+func clusterFindReplicaPair(t *testing.T, client *goredis.ClusterClient) (master, replica clusterNodeInfo) {
+	t.Helper()
+
+	raw, err := client.ClusterNodes(context.Background()).Result()
+	if err != nil {
+		t.Fatalf("CLUSTER NODES: %v", err)
+	}
+
+	nodes := parseClusterNodes(raw)
+
+	// Build a map from node ID to node info for masters
+	masters := make(map[string]clusterNodeInfo)
+	for _, n := range nodes {
+		if n.Role == "master" {
+			masters[n.NodeID] = n
+		}
+	}
+
+	// Find a replica whose master exists in the map
+	for _, n := range nodes {
+		if n.Role == "slave" {
+			if m, ok := masters[n.MasterID]; ok {
+				return m, n
+			}
+		}
+	}
+
+	t.Fatal("no master-replica pair found in cluster")
+	return
+}
+
+// waitForClusterFailover polls CLUSTER NODES until originalMasterAddr is no longer a master.
+func waitForClusterFailover(t *testing.T, client *goredis.ClusterClient, originalMasterAddr string, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		raw, err := client.ClusterNodes(context.Background()).Result()
+		if err == nil {
+			for _, n := range parseClusterNodes(raw) {
+				if n.Addr == originalMasterAddr && n.Role == "slave" {
+					return
+				}
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	t.Fatalf("cluster failover did not complete within %v", timeout)
+}
+
+func TestIntegration_ClusterFailover(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	addrs := os.Getenv("REDIS_CLUSTER_ADDRS")
+	if addrs == "" {
+		t.Skip("REDIS_CLUSTER_ADDRS not set, skipping cluster failover test")
+	}
+
+	client := goredis.NewClusterClient(&goredis.ClusterOptions{
+		Addrs: strings.Split(addrs, ","),
+	})
+	t.Cleanup(func() { _ = client.Close() })
+
+	s := newTestStorage(t, client)
+	ctx := context.Background()
+
+	// Find the master-replica pair in the cluster
+	targetMaster, replica := clusterFindReplicaPair(t, client)
+	t.Logf("target master: %s, replica: %s", targetMaster.Addr, replica.Addr)
+
+	// Store data before failover
+	preFailoverKey := "cluster-failover-pre"
+	preFailoverRes := &idem.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"application/json"}},
+		Body:       []byte(`{"before":"failover"}`),
+	}
+	if err := s.Set(ctx, preFailoverKey, preFailoverRes, time.Hour); err != nil {
+		t.Fatalf("Set() before failover: %v", err)
+	}
+
+	// Trigger CLUSTER FAILOVER on the replica
+	replicaClient := goredis.NewClient(&goredis.Options{Addr: replica.Addr})
+	defer func() { _ = replicaClient.Close() }()
+
+	if err := replicaClient.ClusterFailover(ctx).Err(); err != nil {
+		t.Fatalf("CLUSTER FAILOVER: %v", err)
+	}
+
+	// Wait for failover to complete
+	waitForClusterFailover(t, client, targetMaster.Addr, 30*time.Second)
+	t.Log("cluster failover completed")
+
+	// Verify: pre-failover data is accessible via ClusterClient
+	got, err := s.Get(ctx, preFailoverKey)
+	if err != nil {
+		t.Fatalf("Get() after failover: %v", err)
+	}
+	if got == nil {
+		t.Fatal("Get() after failover = nil, want pre-failover data")
+	}
+	if got.StatusCode != preFailoverRes.StatusCode {
+		t.Errorf("StatusCode = %d, want %d", got.StatusCode, preFailoverRes.StatusCode)
+	}
+	if string(got.Body) != string(preFailoverRes.Body) {
+		t.Errorf("Body = %q, want %q", got.Body, preFailoverRes.Body)
+	}
+
+	// Verify: Set/Get on new master
+	postFailoverKey := "cluster-failover-post"
+	postFailoverRes := &idem.Response{
+		StatusCode: http.StatusCreated,
+		Header:     http.Header{"Content-Type": {"text/plain"}},
+		Body:       []byte("after failover"),
+	}
+	if err := s.Set(ctx, postFailoverKey, postFailoverRes, time.Hour); err != nil {
+		t.Fatalf("Set() after failover: %v", err)
+	}
+
+	got, err = s.Get(ctx, postFailoverKey)
+	if err != nil {
+		t.Fatalf("Get() after failover (new key): %v", err)
+	}
+	if got == nil {
+		t.Fatal("Get() after failover (new key) = nil, want non-nil")
+	}
+	if got.StatusCode != postFailoverRes.StatusCode {
+		t.Errorf("StatusCode = %d, want %d", got.StatusCode, postFailoverRes.StatusCode)
+	}
+
+	// Verify: Delete on new master
+	if err := s.Delete(ctx, postFailoverKey); err != nil {
+		t.Fatalf("Delete() after failover: %v", err)
+	}
+	got, err = s.Get(ctx, postFailoverKey)
+	if err != nil {
+		t.Fatalf("Get() after Delete: %v", err)
+	}
+	if got != nil {
+		t.Errorf("Get() after Delete = %v, want nil", got)
+	}
+
+	// Verify: Lock/Unlock on new master
+	lockKey := "cluster-failover-lock"
+	unlock, err := s.Lock(ctx, lockKey, 5*time.Second)
+	if err != nil {
+		t.Fatalf("Lock() after failover: %v", err)
+	}
+	unlock()
+
+	// Cleanup
+	client.Del(ctx, "idem:"+preFailoverKey)
+	client.Del(ctx, "idem:lock:"+lockKey)
+}
+
 func TestIntegration_Storage_ImplementsLocker(t *testing.T) {
 	client := newTestClient(t)
 

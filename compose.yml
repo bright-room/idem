@@ -52,12 +52,24 @@ services:
       --cluster-node-timeout 5000
       --appendonly yes
 
+  redis-cluster-node-4:
+    image: redis:8-alpine
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --port 7003
+      --bind 0.0.0.0
+      --cluster-node-timeout 5000
+      --appendonly yes
+
   redis-cluster-init:
     image: redis:8-alpine
     depends_on:
       - redis-cluster-node-1
       - redis-cluster-node-2
       - redis-cluster-node-3
+      - redis-cluster-node-4
     restart: "no"
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -68,6 +80,10 @@ services:
           redis-cluster-node-2:7001 \
           redis-cluster-node-3:7002 \
           --cluster-replicas 0 --cluster-yes
+        sleep 1
+        redis-cli --cluster add-node \
+          redis-cluster-node-4:7003 redis-cluster-node-1:7000 \
+          --cluster-slave --cluster-yes
 
   redis-sentinel-master:
     image: redis:8-alpine
