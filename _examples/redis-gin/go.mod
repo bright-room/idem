@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/bright-room/idem v1.1.1
+	github.com/bright-room/idem/gin v0.0.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/redis/go-redis/v9 v9.18.0
 )
@@ -43,4 +44,7 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 )
 
-replace github.com/bright-room/idem => ../../
+replace (
+	github.com/bright-room/idem => ../../
+	github.com/bright-room/idem/gin => ../../gin
+)

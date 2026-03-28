@@ -27,6 +27,7 @@ make shell          # Interactive bash in container
 
 - **Root package (`idem`)**: Core types and middleware — `idem.go`, `middleware.go`, `storage.go`, `locker.go`, `response.go`, `option.go`. Generated files: `recorder_gen.go`, `recorder_gen_test.go`
 - **`internal/cmd/genrecorder/`**: Code generator for `responseRecorder` combination types (run via `go generate ./...`)
+- **`gin/`**: Gin framework adapter (separate sub-module with own `go.mod` to isolate the `github.com/gin-gonic/gin` dependency)
 - **`redis/`**: Redis storage implementation
 - **`_examples/`**: Framework-specific usage examples (Gin, Echo, Chi)
 
