@@ -232,7 +232,7 @@ func TestConfig_validate(t *testing.T) {
 					if cfg.KeyHeader != "X-Test" {
 						return errors.New("unexpected KeyHeader")
 					}
-					if cfg.TTL != 5*time.Minute {
+					if cfg.TTL != Duration(5*time.Minute) {
 						return errors.New("unexpected TTL")
 					}
 					return nil
@@ -310,7 +310,7 @@ func TestConfig_snapshot(t *testing.T) {
 		if snap.KeyHeader != cfg.keyHeader {
 			t.Errorf("KeyHeader = %q, want %q", snap.KeyHeader, cfg.keyHeader)
 		}
-		if snap.TTL != cfg.ttl {
+		if snap.TTL != Duration(cfg.ttl) {
 			t.Errorf("TTL = %v, want %v", snap.TTL, cfg.ttl)
 		}
 	})
@@ -417,7 +417,7 @@ func TestConfig_String(t *testing.T) {
 
 		cfg := Config{
 			KeyHeader:      "Idempotency-Key",
-			TTL:            24 * time.Hour,
+			TTL:            Duration(24 * time.Hour),
 			StorageType:    "*idem.MemoryStorage",
 			LockSupported:  true,
 			MetricsEnabled: true,

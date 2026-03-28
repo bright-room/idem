@@ -35,6 +35,8 @@ Key interfaces:
 - `Locker` — optional per-key mutual exclusion for concurrent request handling. Storage implementations that also implement `Locker` enable automatic lock acquisition in the middleware. Returns 409 Conflict on lock failure.
 - `Validator` — `Validate(Config) error` for configuration validation. `ValidatorFunc` is a function adapter (like `http.HandlerFunc`). Preset validators (`MaxTTL`, `MinTTL`, etc.) return `*PresetValidator` which supports `.WithMessage()` for custom error messages. Composition functions `All` (AND) and `Any` (OR) combine multiple validators and also return `*PresetValidator`.
 
+- `Duration` — `time.Duration` wrapper with human-readable JSON serialization (e.g. `"1h0m0s"` instead of nanoseconds). Used in `Config.TTL`.
+
 Configuration uses the **Functional Options** pattern (`WithXxx()` functions).
 
 ## Conventions

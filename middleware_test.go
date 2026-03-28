@@ -763,7 +763,7 @@ func TestMiddleware_Config(t *testing.T) {
 		if cfg.KeyHeader != DefaultKeyHeader {
 			t.Errorf("KeyHeader = %q, want %q", cfg.KeyHeader, DefaultKeyHeader)
 		}
-		if cfg.TTL != DefaultTTL {
+		if cfg.TTL != Duration(DefaultTTL) {
 			t.Errorf("TTL = %v, want %v", cfg.TTL, DefaultTTL)
 		}
 		if cfg.StorageType != "*idem.MemoryStorage" {
@@ -803,7 +803,7 @@ func TestMiddleware_Config(t *testing.T) {
 		if cfg.KeyHeader != "X-Request-Id" {
 			t.Errorf("KeyHeader = %q, want %q", cfg.KeyHeader, "X-Request-Id")
 		}
-		if cfg.TTL != 5*time.Minute {
+		if cfg.TTL != Duration(5*time.Minute) {
 			t.Errorf("TTL = %v, want %v", cfg.TTL, 5*time.Minute)
 		}
 		if cfg.StorageType != "*idem.stubStorage" {
@@ -860,9 +860,8 @@ func TestMiddleware_ConfigHandler(t *testing.T) {
 			t.Errorf("Content-Type = %q, want %q", ct, "application/json")
 		}
 
-		// json.Decode deserializes time.Duration as an integer (nanoseconds).
-		// This round-trip works because Config uses the default json tag
-		// without a custom MarshalJSON implementation.
+		// Duration.UnmarshalJSON decodes the human-readable string (e.g. "24h0m0s")
+		// produced by Duration.MarshalJSON, so the round-trip preserves the value.
 		var got Config
 		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
@@ -900,7 +899,7 @@ func TestMiddleware_ConfigHandler(t *testing.T) {
 		if got.KeyHeader != "X-Request-Id" {
 			t.Errorf("KeyHeader = %q, want %q", got.KeyHeader, "X-Request-Id")
 		}
-		if got.TTL != 5*time.Minute {
+		if got.TTL != Duration(5*time.Minute) {
 			t.Errorf("TTL = %v, want %v", got.TTL, 5*time.Minute)
 		}
 		if got.KeyMaxLength != 64 {

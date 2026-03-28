@@ -214,7 +214,7 @@ http.HandleFunc("/debug/idem/config", func(w http.ResponseWriter, r *http.Reques
 })
 ```
 
-The `Config` struct includes JSON tags and implements `fmt.Stringer` for convenient serialization.
+The `Config` struct includes JSON tags and implements `fmt.Stringer` for convenient serialization. The `TTL` field uses the `Duration` type, which serializes as a human-readable string (e.g. `"1h0m0s"`) instead of integer nanoseconds.
 
 ## Error Handling
 
