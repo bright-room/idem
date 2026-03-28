@@ -41,7 +41,7 @@ func TestMaxTTL(t *testing.T) {
 			t.Parallel()
 
 			v := MaxTTL(tt.max)
-			err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: tt.ttl})
+			err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(tt.ttl)})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("MaxTTL(%v)() error = %v, wantErr %v", tt.max, err, tt.wantErr)
 			}
@@ -83,7 +83,7 @@ func TestMinTTL(t *testing.T) {
 			t.Parallel()
 
 			v := MinTTL(tt.min)
-			err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: tt.ttl})
+			err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(tt.ttl)})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("MinTTL(%v)() error = %v, wantErr %v", tt.min, err, tt.wantErr)
 			}
@@ -166,7 +166,7 @@ func TestTTLRange(t *testing.T) {
 			t.Parallel()
 
 			v := TTLRange(tt.min, tt.max)
-			err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: tt.ttl})
+			err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(tt.ttl)})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TTLRange(%v, %v)() error = %v, wantErr %v", tt.min, tt.max, err, tt.wantErr)
 			}
@@ -210,7 +210,7 @@ func TestKeyHeaderPattern(t *testing.T) {
 			t.Parallel()
 
 			v := KeyHeaderPattern(tt.pattern)
-			err := v.Validate(Config{KeyHeader: tt.keyHeader, TTL: DefaultTTL})
+			err := v.Validate(Config{KeyHeader: tt.keyHeader, TTL: Duration(DefaultTTL)})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("KeyHeaderPattern(%s)() error = %v, wantErr %v", tt.pattern, err, tt.wantErr)
 			}
@@ -258,7 +258,7 @@ func TestAllowedKeyHeaders(t *testing.T) {
 			t.Parallel()
 
 			v := AllowedKeyHeaders(tt.allowed...)
-			err := v.Validate(Config{KeyHeader: tt.keyHeader, TTL: DefaultTTL})
+			err := v.Validate(Config{KeyHeader: tt.keyHeader, TTL: Duration(DefaultTTL)})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AllowedKeyHeaders(%v)() error = %v, wantErr %v", tt.allowed, err, tt.wantErr)
 			}
@@ -394,31 +394,31 @@ func TestPresetValidator_WithMessage(t *testing.T) {
 		{
 			name:    "MaxTTL with custom message",
 			v:       MaxTTL(1 * time.Hour).WithMessage("TTL is too long for this service"),
-			cfg:     Config{TTL: 2 * time.Hour},
+			cfg:     Config{TTL: Duration(2 * time.Hour)},
 			wantMsg: "TTL is too long for this service",
 		},
 		{
 			name:    "MinTTL with custom message",
 			v:       MinTTL(1 * time.Hour).WithMessage("TTL is too short"),
-			cfg:     Config{TTL: 30 * time.Minute},
+			cfg:     Config{TTL: Duration(30 * time.Minute)},
 			wantMsg: "TTL is too short",
 		},
 		{
 			name:    "TTLRange with custom message",
 			v:       TTLRange(1*time.Minute, 1*time.Hour).WithMessage("TTL out of acceptable range"),
-			cfg:     Config{TTL: 2 * time.Hour},
+			cfg:     Config{TTL: Duration(2 * time.Hour)},
 			wantMsg: "TTL out of acceptable range",
 		},
 		{
 			name:    "KeyHeaderPattern with custom message",
 			v:       KeyHeaderPattern(regexp.MustCompile(`^X-`)).WithMessage("header must start with X-"),
-			cfg:     Config{KeyHeader: "Idempotency-Key", TTL: DefaultTTL},
+			cfg:     Config{KeyHeader: "Idempotency-Key", TTL: Duration(DefaultTTL)},
 			wantMsg: "header must start with X-",
 		},
 		{
 			name:    "AllowedKeyHeaders with custom message",
 			v:       AllowedKeyHeaders("Idempotency-Key").WithMessage("unsupported header"),
-			cfg:     Config{KeyHeader: "X-Custom", TTL: DefaultTTL},
+			cfg:     Config{KeyHeader: "X-Custom", TTL: Duration(DefaultTTL)},
 			wantMsg: "unsupported header",
 		},
 	}
@@ -442,7 +442,7 @@ func TestPresetValidator_WithMessage_defaultMessageWithoutWithMessage(t *testing
 	t.Parallel()
 
 	v := MaxTTL(1 * time.Hour)
-	err := v.Validate(Config{TTL: 2 * time.Hour})
+	err := v.Validate(Config{TTL: Duration(2 * time.Hour)})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -455,7 +455,7 @@ func TestPresetValidator_WithMessage_nilOnSuccess(t *testing.T) {
 	t.Parallel()
 
 	v := MaxTTL(1 * time.Hour).WithMessage("custom error")
-	err := v.Validate(Config{TTL: 30 * time.Minute})
+	err := v.Validate(Config{TTL: Duration(30 * time.Minute)})
 	if err != nil {
 		t.Errorf("expected nil, got %v", err)
 	}
@@ -467,7 +467,7 @@ func TestPresetValidator_WithMessage_doesNotMutateOriginal(t *testing.T) {
 	original := MaxTTL(1 * time.Hour)
 	_ = original.WithMessage("custom error")
 
-	err := original.Validate(Config{TTL: 2 * time.Hour})
+	err := original.Validate(Config{TTL: Duration(2 * time.Hour)})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -529,7 +529,7 @@ func TestAll(t *testing.T) {
 			t.Parallel()
 
 			v := All(tt.validators...)
-			err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
+			err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(DefaultTTL)})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("All() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -546,7 +546,7 @@ func TestAll_WithMessage(t *testing.T) {
 	alwaysFail := ValidatorFunc(func(_ Config) error { return errors.New("fail") })
 
 	v := All(alwaysFail).WithMessage("custom all error")
-	err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
+	err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(DefaultTTL)})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -612,7 +612,7 @@ func TestAny(t *testing.T) {
 			t.Parallel()
 
 			v := Any(tt.validators...)
-			err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
+			err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(DefaultTTL)})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Any() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -629,7 +629,7 @@ func TestAny_WithMessage(t *testing.T) {
 	alwaysFail := ValidatorFunc(func(_ Config) error { return errors.New("fail") })
 
 	v := Any(alwaysFail).WithMessage("custom any error")
-	err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
+	err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(DefaultTTL)})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -648,7 +648,7 @@ func TestAll_Any_nested(t *testing.T) {
 		t.Parallel()
 
 		v := All(Any(alwaysFail, alwaysPass), alwaysPass)
-		err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
+		err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(DefaultTTL)})
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -658,7 +658,7 @@ func TestAll_Any_nested(t *testing.T) {
 		t.Parallel()
 
 		v := All(Any(alwaysFail, alwaysFail), alwaysPass)
-		err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
+		err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(DefaultTTL)})
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -668,7 +668,7 @@ func TestAll_Any_nested(t *testing.T) {
 		t.Parallel()
 
 		v := Any(All(alwaysFail, alwaysPass), alwaysPass)
-		err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
+		err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(DefaultTTL)})
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -678,7 +678,7 @@ func TestAll_Any_nested(t *testing.T) {
 		t.Parallel()
 
 		v := Any(All(alwaysFail, alwaysPass), alwaysFail)
-		err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
+		err := v.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(DefaultTTL)})
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -692,7 +692,7 @@ func TestAll_WithMessage_doesNotMutateOriginal(t *testing.T) {
 	original := All(alwaysFail)
 	_ = original.WithMessage("custom")
 
-	err := original.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
+	err := original.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(DefaultTTL)})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -708,7 +708,7 @@ func TestAny_WithMessage_doesNotMutateOriginal(t *testing.T) {
 	original := Any(alwaysFail)
 	_ = original.WithMessage("custom")
 
-	err := original.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: DefaultTTL})
+	err := original.Validate(Config{KeyHeader: DefaultKeyHeader, TTL: Duration(DefaultTTL)})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

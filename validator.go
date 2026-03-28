@@ -41,7 +41,7 @@ func (p *PresetValidator) WithMessage(msg string) *PresetValidator {
 func MaxTTL(limit time.Duration) *PresetValidator {
 	return &PresetValidator{
 		validate: func(cfg Config) error {
-			if cfg.TTL > limit {
+			if cfg.TTL > Duration(limit) {
 				return fmt.Errorf("idem: ttl %v exceeds maximum %v", cfg.TTL, limit)
 			}
 			return nil
@@ -53,7 +53,7 @@ func MaxTTL(limit time.Duration) *PresetValidator {
 func MinTTL(limit time.Duration) *PresetValidator {
 	return &PresetValidator{
 		validate: func(cfg Config) error {
-			if cfg.TTL < limit {
+			if cfg.TTL < Duration(limit) {
 				return fmt.Errorf("idem: ttl %v is shorter than minimum %v", cfg.TTL, limit)
 			}
 			return nil
@@ -68,7 +68,7 @@ func TTLRange(lower, upper time.Duration) *PresetValidator {
 			if lower > upper {
 				return ErrInvalidTTLRange
 			}
-			if cfg.TTL < lower || cfg.TTL > upper {
+			if cfg.TTL < Duration(lower) || cfg.TTL > Duration(upper) {
 				return fmt.Errorf("idem: ttl %v is out of range [%v, %v]", cfg.TTL, lower, upper)
 			}
 			return nil

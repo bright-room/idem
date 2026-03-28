@@ -24,7 +24,7 @@ type Config struct {
 	KeyHeader string `json:"key_header"`
 
 	// TTL is the time-to-live for cached responses.
-	TTL time.Duration `json:"ttl"`
+	TTL Duration `json:"ttl"`
 
 	// KeyMaxLength is the maximum allowed length for idempotency key values.
 	// A value of 0 means no length limit.
@@ -75,7 +75,7 @@ type config struct {
 func (c *config) snapshot() Config {
 	cfg := Config{
 		KeyHeader:      c.keyHeader,
-		TTL:            c.ttl,
+		TTL:            Duration(c.ttl),
 		KeyMaxLength:   c.keyMaxLength,
 		ValidatorCount: len(c.validators),
 	}
