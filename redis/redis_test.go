@@ -2,6 +2,7 @@ package redis_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -645,6 +646,173 @@ func TestIntegration_SentinelFailover(t *testing.T) {
 	// Cleanup
 	client.Del(ctx, "idem:"+preFailoverKey)
 	client.Del(ctx, "idem:lock:"+lockKey)
+}
+
+func TestIntegration_SentinelFailover_DuringTransition(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	addrs := os.Getenv("REDIS_SENTINEL_ADDRS")
+	if addrs == "" {
+		t.Skip("REDIS_SENTINEL_ADDRS not set, skipping sentinel failover test")
+	}
+
+	masterName := os.Getenv("REDIS_SENTINEL_MASTER")
+	if masterName == "" {
+		masterName = "mymaster"
+	}
+
+	sentinelAddrs := strings.Split(addrs, ",")
+
+	client := goredis.NewFailoverClient(&goredis.FailoverOptions{
+		MasterName:    masterName,
+		SentinelAddrs: sentinelAddrs,
+	})
+	t.Cleanup(func() { _ = client.Close() })
+
+	s := newTestStorage(t, client)
+	ctx := context.Background()
+
+	// Store data before failover
+	preKey := "sentinel-during-pre"
+	preRes := &idem.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"application/json"}},
+		Body:       []byte(`{"phase":"before"}`),
+	}
+	if err := s.Set(ctx, preKey, preRes, time.Hour); err != nil {
+		t.Fatalf("Set() before failover: %v", err)
+	}
+
+	originalMasterAddr := sentinelMasterAddr(t, sentinelAddrs[0], masterName)
+	t.Logf("original master: %s", originalMasterAddr)
+
+	// Trigger failover
+	sentinel := goredis.NewSentinelClient(&goredis.Options{
+		Addr: sentinelAddrs[0],
+	})
+	defer func() { _ = sentinel.Close() }()
+
+	if err := sentinel.Failover(ctx, masterName).Err(); err != nil {
+		t.Fatalf("SENTINEL FAILOVER: %v", err)
+	}
+
+	// Immediately execute Storage operations during transition
+	t.Run("Get_during_transition", func(t *testing.T) {
+		var errors, successes int
+		for range 20 {
+			_, err := s.Get(ctx, preKey)
+			if err != nil {
+				errors++
+				t.Logf("Get() during transition: %v", err)
+			} else {
+				successes++
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Logf("Get during transition: %d errors, %d successes", errors, successes)
+	})
+
+	t.Run("Set_during_transition", func(t *testing.T) {
+		var errors, successes int
+		for i := range 20 {
+			res := &idem.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": {"text/plain"}},
+				Body:       []byte("during-transition"),
+			}
+			err := s.Set(ctx, fmt.Sprintf("sentinel-during-set-%d", i), res, time.Hour)
+			if err != nil {
+				errors++
+				t.Logf("Set() during transition: %v", err)
+			} else {
+				successes++
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Logf("Set during transition: %d errors, %d successes", errors, successes)
+	})
+
+	t.Run("Lock_during_transition", func(t *testing.T) {
+		var errors, successes int
+		for i := range 20 {
+			lockCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+			unlock, err := s.Lock(lockCtx, fmt.Sprintf("sentinel-during-lock-%d", i), 5*time.Second)
+			cancel()
+			if err != nil {
+				errors++
+				t.Logf("Lock() during transition: %v", err)
+			} else {
+				successes++
+				unlock()
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Logf("Lock during transition: %d errors, %d successes", errors, successes)
+	})
+
+	// Wait for failover to complete
+	newMasterAddr := waitForFailover(t, sentinelAddrs[0], masterName, originalMasterAddr, 30*time.Second)
+	t.Logf("new master after failover: %s", newMasterAddr)
+
+	// Verify: all operations succeed after failover completes
+	t.Run("operations_succeed_after_failover", func(t *testing.T) {
+		// Get pre-failover data
+		got, err := s.Get(ctx, preKey)
+		if err != nil {
+			t.Fatalf("Get() after failover: %v", err)
+		}
+		if got == nil {
+			t.Fatal("Get() after failover = nil, want pre-failover data")
+		}
+		if got.StatusCode != preRes.StatusCode {
+			t.Errorf("StatusCode = %d, want %d", got.StatusCode, preRes.StatusCode)
+		}
+
+		// Set new data
+		postKey := "sentinel-during-post"
+		postRes := &idem.Response{
+			StatusCode: http.StatusCreated,
+			Header:     http.Header{"Content-Type": {"text/plain"}},
+			Body:       []byte("after transition"),
+		}
+		if err := s.Set(ctx, postKey, postRes, time.Hour); err != nil {
+			t.Fatalf("Set() after failover: %v", err)
+		}
+
+		got, err = s.Get(ctx, postKey)
+		if err != nil {
+			t.Fatalf("Get() after failover (new key): %v", err)
+		}
+		if got == nil {
+			t.Fatal("Get() after failover (new key) = nil")
+		}
+		if got.StatusCode != postRes.StatusCode {
+			t.Errorf("StatusCode = %d, want %d", got.StatusCode, postRes.StatusCode)
+		}
+
+		// Delete
+		if err := s.Delete(ctx, postKey); err != nil {
+			t.Fatalf("Delete() after failover: %v", err)
+		}
+
+		// Lock
+		unlock, err := s.Lock(ctx, "sentinel-during-post-lock", 5*time.Second)
+		if err != nil {
+			t.Fatalf("Lock() after failover: %v", err)
+		}
+		unlock()
+	})
+
+	// Cleanup
+	client.Del(ctx, "idem:"+preKey)
+	for i := range 20 {
+		client.Del(ctx, fmt.Sprintf("idem:sentinel-during-set-%d", i))
+		client.Del(ctx, fmt.Sprintf("idem:lock:sentinel-during-lock-%d", i))
+	}
+	client.Del(ctx, "idem:sentinel-during-post")
+	client.Del(ctx, "idem:lock:sentinel-during-post-lock")
 }
 
 func TestIntegration_Storage_ImplementsLocker(t *testing.T) {
