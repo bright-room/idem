@@ -134,11 +134,43 @@ gh issue edit <issue-number> --add-label "<ラベル1>,<ラベル2>"
 
 ### 3. 実装プランの今後の展望からの Issue 作成
 
-実装プランの「今後の展望」セクションを読み取り、既存 Issue と重複しないものを新規 Issue として作成する。
+特定マイルストーンに紐づく Issue の実装プラン（「今後の展望」セクション）を読み取り、既存 Issue と重複しないものを新規 Issue として作成する。
 
-#### 3-1. 実装プランの読み込み
+#### 3-0. 対象マイルストーンの決定
 
-`.claude/outputs/plans/` ディレクトリが存在する場合、`PLAN-*.md` ファイルを読み込み、「今後の展望」セクションを抽出する。ディレクトリやファイルが存在しない場合は「実装プランが見つかりませんでした」と記録してスキップする。
+triage スキルの引数でマイルストーンタイトル（バージョン）が指定されている場合はそのマイルストーンを対象にする。引数がない場合は、最もバージョンが新しいクローズ済みマイルストーンを自動的に対象とする。
+
+```bash
+# クローズ済みマイルストーン一覧を取得
+gh api repos/{owner}/{repo}/milestones?state=closed --jq '.[].title'
+```
+
+取得したマイルストーン一覧から Semver でソートし、最新バージョンを選択する。
+
+#### 3-1. 対象 Issue の取得
+
+対象マイルストーンに紐づく Issue のうち、**正常にクローズされたもの（Done / Closed / Fixed / Resolved）のみ**を取得する。`Close as not planned`（Won't fix, Can't repro, Stale）や `Close as duplicate` でクローズされた Issue は対象外とする。
+
+```bash
+# マイルストーンに紐づくクローズ済み Issue を取得
+gh issue list --state closed --milestone "<マイルストーンタイトル>" --json number,title,stateReason --limit 100
+```
+
+- `stateReason` が `COMPLETED` の Issue のみを対象とする（`NOT_PLANNED` は除外）
+
+#### 3-2. 実装プランの読み込み
+
+対象 Issue のコメントから `<!-- claude:plan -->` マーカー付きコメントを検索し、「今後の展望」セクションを抽出する。
+
+```bash
+gh api repos/{owner}/{repo}/issues/<issue-number>/comments \
+  --jq '.[] | select(.body | contains("<!-- claude:plan -->"))'
+```
+
+- 複数のプランコメントが存在する場合は、最新（最後に投稿された）コメントを採用する
+- 「今後の展望」セクションが含まれないプランはスキップする
+- プランコメントを含む Issue が見つからない場合はスキップする
+- 対象マイルストーンにプランコメントを含む Issue が1つもない場合は「実装プランが見つかりませんでした」と記録してスキップする
 
 #### 3-2. 既存 Issue との重複チェック
 
@@ -150,7 +182,7 @@ gh issue list --state all --search "<keyword>" --json number,title,state --limit
 
 #### 3-3. 新規 Issue の作成
 
-プランのファイル名 `PLAN-<Issue番号>-<タイトル>.md` から元の Issue 番号を抽出し、紐づける。
+プランコメントが投稿されている Issue の番号を元 Issue として紐づける。
 
 ```bash
 gh issue create --title "<タイトル>" --label "<Kind>,<Priority>" --body "$(cat <<'EOF'
@@ -261,10 +293,46 @@ gh issue edit <issue-number> --milestone "vX.Y.Z"
 
 ### 5. 棚卸レポートの出力
 
-棚卸の結果を `.claude/outputs/triage/` ディレクトリにファイルとして出力する。
+棚卸の結果を GitHub Discussions に投稿する。
 
-- ディレクトリが存在しない場合は作成すること
-- ファイル名: `TRIAGE-YYYY-MM-DD-HHmmss.md`（実行日時のタイムスタンプ）
+#### 5-1. Discussions カテゴリの取得
+
+Discussions カテゴリを以下の優先順で選択する:
+
+1. 「Triage Reports」カテゴリが存在すればそれを使用
+2. なければ「General」カテゴリにフォールバック
+
+```bash
+gh api graphql -f query='
+{
+  repository(owner: "{owner}", name: "{repo}") {
+    discussionCategories(first: 25) {
+      nodes { id, name }
+    }
+  }
+}'
+```
+
+結果から「Triage Reports」を検索し、見つからなければ「General」を使用する。どちらも見つからない場合（Discussions 未有効化）は、ローカルファイル（`.claude/outputs/triage/TRIAGE-YYYY-MM-DD-HHmmss.md`）にフォールバック出力する。
+
+#### 5-2. Discussion の投稿
+
+```bash
+gh api graphql -f query='
+mutation {
+  createDiscussion(input: {
+    repositoryId: "<repository-id>",
+    categoryId: "<category-id>",
+    title: "Issue 棚卸レポート YYYY-MM-DD",
+    body: "<レポート本文>"
+  }) {
+    discussion { url }
+  }
+}'
+```
+
+- `repositoryId` は `gh api repos/{owner}/{repo} --jq .node_id` で取得する
+- 投稿後、Discussion の URL をユーザーに返すこと
 
 レポートフォーマット:
 
@@ -291,9 +359,9 @@ gh issue edit <issue-number> --milestone "vX.Y.Z"
 
 ### 新規作成した Issue
 
-| # | タイトル | ラベル | 元プラン |
+| # | タイトル | ラベル | 元 Issue |
 |---|---------|--------|---------|
-| #XX | <タイトル> | <ラベル> | PLAN-XX |
+| #XX | <タイトル> | <ラベル> | #YY |
 
 （対象がない場合は「対象なし」と記載）
 
