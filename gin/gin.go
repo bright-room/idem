@@ -52,25 +52,25 @@ func WrapMiddleware(m *idem.Middleware) gin.HandlerFunc {
 // (Hijack, Flush, etc.) delegate to the original Gin writer.
 type responseWriter struct {
 	http.ResponseWriter
-	ginWriter    gin.ResponseWriter
-	status       int
-	size         int
-	headerWriten bool
-	written      bool
+	ginWriter     gin.ResponseWriter
+	status        int
+	size          int
+	headerWritten bool
+	written       bool
 }
 
 func (w *responseWriter) WriteHeader(code int) {
-	if !w.headerWriten {
+	if !w.headerWritten {
 		w.status = code
-		w.headerWriten = true
+		w.headerWritten = true
 	}
 	w.ResponseWriter.WriteHeader(code)
 }
 
 func (w *responseWriter) Write(data []byte) (int, error) {
-	if !w.headerWriten {
+	if !w.headerWritten {
 		w.status = http.StatusOK
-		w.headerWriten = true
+		w.headerWritten = true
 	}
 	w.written = true
 	n, err := w.ResponseWriter.Write(data)
@@ -97,6 +97,9 @@ func (w *responseWriter) Written() bool {
 func (w *responseWriter) WriteHeaderNow() {
 	if !w.written {
 		w.written = true
+		if w.status == 0 {
+			w.status = http.StatusOK
+		}
 		w.ResponseWriter.WriteHeader(w.status)
 	}
 }

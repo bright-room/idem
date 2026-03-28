@@ -52,14 +52,16 @@ jobs:
           gotestsum \
             --junitfile ../gin-test-report.xml \
             --format testdox \
-            -- -race -v ./...
+            -- -race -v -coverprofile=../gin-coverage.out ./...
 
       - name: Test Report
         uses: dorny/test-reporter@v2
         if: always()
         with:
           name: Unit Test Report
-          path: unit-test-report.xml
+          path: |
+            unit-test-report.xml
+            gin-test-report.xml
           reporter: java-junit
 
       - name: Coverage Report

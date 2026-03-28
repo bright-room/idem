@@ -211,6 +211,30 @@ func TestWrapMiddleware_DifferentKeysAreIndependent(t *testing.T) {
 	}
 }
 
+func TestWrapMiddleware_WriteHeaderNow(t *testing.T) {
+	mw, err := idem.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var capturedStatus int
+	r := gin.New()
+	r.POST("/orders", idemgin.WrapMiddleware(mw), func(c *gin.Context) {
+		c.Writer.WriteHeaderNow()
+		capturedStatus = c.Writer.Status()
+		c.Writer.Write([]byte(`{"ok":true}`))
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/orders", nil)
+	req.Header.Set("Idempotency-Key", "write-header-now-key")
+	r.ServeHTTP(w, req)
+
+	if capturedStatus != http.StatusOK {
+		t.Fatalf("c.Writer.Status() after WriteHeaderNow: want %d, got %d", http.StatusOK, capturedStatus)
+	}
+}
+
 func TestWrapMiddleware_RouteGroup(t *testing.T) {
 	mw, err := idem.New()
 	if err != nil {
