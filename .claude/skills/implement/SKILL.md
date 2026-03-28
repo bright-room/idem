@@ -158,6 +158,19 @@ EOF
 ```
 
 - PR タイトルは 70 文字以内に収めること
+
+3. Issue に `Type: *` ラベルが付与されている場合、同じラベルを PR にも付与する
+
+```bash
+# Issue のラベルを取得し、"Type: " で始まるラベルをカンマ区切りで抽出
+LABELS=$(gh issue view <issue-number> --json labels --jq '[.labels[].name | select(startswith("Type: "))] | join(",")')
+
+# ラベルが存在する場合のみ PR に付与
+if [ -n "$LABELS" ]; then
+  gh pr edit --add-label "$LABELS"
+fi
+```
+
 - PR の URL をユーザーに返すこと
 
 #### `--branch` ありの場合（既存ブランチでの修正）
