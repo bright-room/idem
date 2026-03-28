@@ -13,8 +13,10 @@ import (
 )
 
 const (
-	defaultKeyPrefix  = "idem:"
-	defaultLockPrefix = "idem:lock:"
+	// DefaultKeyPrefix is the default prefix for Redis cache keys.
+	DefaultKeyPrefix = "idem:"
+	// DefaultLockPrefix is the default prefix for Redis lock keys.
+	DefaultLockPrefix = "idem:lock:"
 	lockRetryInterval = 50 * time.Millisecond
 )
 
@@ -37,7 +39,7 @@ type Storage struct {
 type Option func(*Storage)
 
 // WithKeyPrefix sets the prefix for Redis keys.
-// Default is "idem."
+// Default is DefaultKeyPrefix ("idem:").
 func WithKeyPrefix(prefix string) Option {
 	return func(s *Storage) {
 		s.keyPrefix = prefix
@@ -45,7 +47,7 @@ func WithKeyPrefix(prefix string) Option {
 }
 
 // WithLockPrefix sets the prefix for Redis lock keys.
-// Default is "idem:lock:".
+// Default is DefaultLockPrefix ("idem:lock:").
 func WithLockPrefix(prefix string) Option {
 	return func(s *Storage) {
 		s.lockPrefix = prefix
@@ -58,8 +60,8 @@ func WithLockPrefix(prefix string) Option {
 func New(client goredis.Cmdable, opts ...Option) (*Storage, error) {
 	s := &Storage{
 		client:     client,
-		keyPrefix:  defaultKeyPrefix,
-		lockPrefix: defaultLockPrefix,
+		keyPrefix:  DefaultKeyPrefix,
+		lockPrefix: DefaultLockPrefix,
 	}
 	for _, opt := range opts {
 		opt(s)
