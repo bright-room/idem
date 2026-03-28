@@ -107,6 +107,27 @@ jobs:
             127.0.0.1:7000 127.0.0.1:7001 127.0.0.1:7002 \
             --cluster-replicas 0 --cluster-yes
 
+          # Add a replica node for failover testing
+          docker run -d --name redis-cluster-7003 --network host \
+            redis:8-alpine redis-server \
+            --cluster-enabled yes \
+            --cluster-config-file nodes.conf \
+            --port 7003 \
+            --bind 0.0.0.0 \
+            --cluster-node-timeout 5000 \
+            --appendonly yes
+
+          for i in $(seq 1 30); do
+            if docker exec redis-cluster-7003 redis-cli -p 7003 ping 2>/dev/null | grep -q PONG; then
+              break
+            fi
+            sleep 1
+          done
+
+          docker exec redis-cluster-7003 redis-cli --cluster add-node \
+            127.0.0.1:7003 127.0.0.1:7000 \
+            --cluster-slave --cluster-yes
+
       - name: Start Redis Sentinel
         run: |
           # Start master
