@@ -1,6 +1,7 @@
 package idem
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -190,6 +191,9 @@ func TestDiffConfig_fieldOrder(t *testing.T) {
 		"KeyHeader", "TTL", "KeyMaxLength", "StorageType",
 		"LockSupported", "MetricsEnabled", "OnErrorEnabled", "ValidatorCount",
 	}
+	if len(diff.Diffs) != len(wantOrder) {
+		t.Fatalf("len(Diffs) = %d, want %d", len(diff.Diffs), len(wantOrder))
+	}
 	for i, fd := range diff.Diffs {
 		if fd.Field != wantOrder[i] {
 			t.Errorf("Diffs[%d].Field = %q, want %q", i, fd.Field, wantOrder[i])
@@ -238,6 +242,9 @@ func TestDiffConfig_fieldValues(t *testing.T) {
 		{"ValidatorCount", "0", "3"},
 	}
 
+	if len(diff.Diffs) != len(wantValues) {
+		t.Fatalf("len(Diffs) = %d, want %d", len(diff.Diffs), len(wantValues))
+	}
 	for i, want := range wantValues {
 		fd := diff.Diffs[i]
 		if fd.Old != want.old {
@@ -246,6 +253,38 @@ func TestDiffConfig_fieldValues(t *testing.T) {
 		if fd.New != want.new {
 			t.Errorf("Diffs[%d] (%s) New = %q, want %q", i, want.field, fd.New, want.new)
 		}
+	}
+}
+
+func TestDiffConfig_coversAllFields(t *testing.T) {
+	t.Parallel()
+
+	a := Config{
+		KeyHeader:      "A",
+		TTL:            Duration(1 * time.Hour),
+		KeyMaxLength:   10,
+		StorageType:    "typeA",
+		LockSupported:  false,
+		MetricsEnabled: false,
+		OnErrorEnabled: false,
+		ValidatorCount: 0,
+	}
+	b := Config{
+		KeyHeader:      "B",
+		TTL:            Duration(2 * time.Hour),
+		KeyMaxLength:   20,
+		StorageType:    "typeB",
+		LockSupported:  true,
+		MetricsEnabled: true,
+		OnErrorEnabled: true,
+		ValidatorCount: 1,
+	}
+
+	diff := DiffConfig(a, b)
+	numFields := reflect.TypeOf(Config{}).NumField()
+
+	if len(diff.Diffs) != numFields {
+		t.Errorf("DiffConfig covers %d fields, but Config has %d fields", len(diff.Diffs), numFields)
 	}
 }
 

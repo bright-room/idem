@@ -2,6 +2,7 @@ package idem
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -14,19 +15,27 @@ func (d Duration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(time.Duration(d).String())
 }
 
-// UnmarshalJSON decodes a quoted duration string (e.g. "1h0m0s") into d.
+// UnmarshalJSON decodes a quoted duration string (e.g. "1h0m0s") or an
+// integer nanosecond value into d.
 func (d *Duration) UnmarshalJSON(b []byte) error {
 	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
+	if err := json.Unmarshal(b, &s); err == nil {
+		parsed, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+
+		*d = Duration(parsed)
+
+		return nil
 	}
 
-	parsed, err := time.ParseDuration(s)
-	if err != nil {
-		return err
+	var ns int64
+	if err := json.Unmarshal(b, &ns); err != nil {
+		return fmt.Errorf("idem: Duration must be a string or integer, got %s", string(b))
 	}
 
-	*d = Duration(parsed)
+	*d = Duration(time.Duration(ns))
 
 	return nil
 }
