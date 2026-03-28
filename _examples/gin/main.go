@@ -45,6 +45,9 @@ func main() {
 		})
 	}
 
+	// Debug endpoint: serves the middleware configuration as JSON.
+	r.GET("/debug/idem/config", gin.WrapH(idempotency.ConfigHandler()))
+
 	// This endpoint has no idempotency middleware.
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})

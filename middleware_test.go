@@ -2,6 +2,7 @@ package idem
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -833,6 +834,77 @@ func TestMiddleware_Config(t *testing.T) {
 
 		if !cfg.LockSupported {
 			t.Error("LockSupported = false, want true for Locker-implementing storage")
+		}
+	})
+}
+
+func TestMiddleware_ConfigHandler(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns defaults as JSON", func(t *testing.T) {
+		t.Parallel()
+
+		mw := newTestMiddleware(t)
+		handler := mw.ConfigHandler()
+
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/debug/idem/config", nil)
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+
+		ct := rec.Header().Get("Content-Type")
+		if ct != "application/json" {
+			t.Errorf("Content-Type = %q, want %q", ct, "application/json")
+		}
+
+		// json.Decode deserializes time.Duration as an integer (nanoseconds).
+		// This round-trip works because Config uses the default json tag
+		// without a custom MarshalJSON implementation.
+		var got Config
+		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		want := mw.Config()
+		if got != want {
+			t.Errorf("config = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("reflects custom options", func(t *testing.T) {
+		t.Parallel()
+
+		mw := newTestMiddleware(t,
+			WithKeyHeader("X-Request-Id"),
+			WithTTL(5*time.Minute),
+			WithKeyMaxLength(64),
+		)
+		handler := mw.ConfigHandler()
+
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/debug/idem/config", nil)
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+
+		var got Config
+		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if got.KeyHeader != "X-Request-Id" {
+			t.Errorf("KeyHeader = %q, want %q", got.KeyHeader, "X-Request-Id")
+		}
+		if got.TTL != 5*time.Minute {
+			t.Errorf("TTL = %v, want %v", got.TTL, 5*time.Minute)
+		}
+		if got.KeyMaxLength != 64 {
+			t.Errorf("KeyMaxLength = %d, want 64", got.KeyMaxLength)
 		}
 	})
 }
