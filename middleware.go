@@ -91,12 +91,19 @@ func (m *Middleware) Handler() func(http.Handler) http.Handler {
 
 			rr := rec.(recorder)
 			res := rr.toResponse()
-			if err := m.cfg.storage.Set(r.Context(), key, res, m.cfg.ttl); err != nil {
-				if m.cfg.onError != nil {
-					m.cfg.onError(key, err)
+
+			if m.cfg.cacheable(res.StatusCode) {
+				if err := m.cfg.storage.Set(r.Context(), key, res, m.cfg.ttl); err != nil {
+					if m.cfg.onError != nil {
+						m.cfg.onError(key, err)
+					}
+					if m.cfg.metrics != nil && m.cfg.metrics.OnError != nil {
+						m.cfg.metrics.OnError(key, err)
+					}
 				}
-				if m.cfg.metrics != nil && m.cfg.metrics.OnError != nil {
-					m.cfg.metrics.OnError(key, err)
+			} else {
+				if m.cfg.metrics != nil && m.cfg.metrics.OnCacheSkip != nil {
+					m.cfg.metrics.OnCacheSkip(key, res.StatusCode)
 				}
 			}
 

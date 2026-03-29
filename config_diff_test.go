@@ -73,6 +73,14 @@ func TestDiffConfig(t *testing.T) {
 			wantField: "LockSupported",
 		},
 		{
+			name:      "different CacheableEnabled",
+			a:         Config{CacheableEnabled: false},
+			b:         Config{CacheableEnabled: true},
+			wantDiff:  true,
+			wantCount: 1,
+			wantField: "CacheableEnabled",
+		},
+		{
 			name:      "different MetricsEnabled",
 			a:         Config{MetricsEnabled: false},
 			b:         Config{MetricsEnabled: true},
@@ -99,27 +107,29 @@ func TestDiffConfig(t *testing.T) {
 		{
 			name: "all fields differ",
 			a: Config{
-				KeyHeader:      "Idempotency-Key",
-				TTL:            Duration(24 * time.Hour),
-				KeyMaxLength:   0,
-				StorageType:    "*idem.MemoryStorage",
-				LockSupported:  true,
-				MetricsEnabled: true,
-				OnErrorEnabled: true,
-				ValidatorCount: 2,
+				KeyHeader:        "Idempotency-Key",
+				TTL:              Duration(24 * time.Hour),
+				KeyMaxLength:     0,
+				StorageType:      "*idem.MemoryStorage",
+				LockSupported:    true,
+				CacheableEnabled: true,
+				MetricsEnabled:   true,
+				OnErrorEnabled:   true,
+				ValidatorCount:   2,
 			},
 			b: Config{
-				KeyHeader:      "X-Request-Id",
-				TTL:            Duration(1 * time.Hour),
-				KeyMaxLength:   64,
-				StorageType:    "*redis.Storage",
-				LockSupported:  false,
-				MetricsEnabled: false,
-				OnErrorEnabled: false,
-				ValidatorCount: 0,
+				KeyHeader:        "X-Request-Id",
+				TTL:              Duration(1 * time.Hour),
+				KeyMaxLength:     64,
+				StorageType:      "*redis.Storage",
+				LockSupported:    false,
+				CacheableEnabled: false,
+				MetricsEnabled:   false,
+				OnErrorEnabled:   false,
+				ValidatorCount:   0,
 			},
 			wantDiff:  true,
-			wantCount: 8,
+			wantCount: 9,
 		},
 		{
 			name: "multiple fields differ partially",
@@ -165,31 +175,33 @@ func TestDiffConfig_fieldOrder(t *testing.T) {
 	t.Parallel()
 
 	a := Config{
-		KeyHeader:      "A",
-		TTL:            Duration(1 * time.Hour),
-		KeyMaxLength:   10,
-		StorageType:    "typeA",
-		LockSupported:  false,
-		MetricsEnabled: false,
-		OnErrorEnabled: false,
-		ValidatorCount: 0,
+		KeyHeader:        "A",
+		TTL:              Duration(1 * time.Hour),
+		KeyMaxLength:     10,
+		StorageType:      "typeA",
+		LockSupported:    false,
+		CacheableEnabled: false,
+		MetricsEnabled:   false,
+		OnErrorEnabled:   false,
+		ValidatorCount:   0,
 	}
 	b := Config{
-		KeyHeader:      "B",
-		TTL:            Duration(2 * time.Hour),
-		KeyMaxLength:   20,
-		StorageType:    "typeB",
-		LockSupported:  true,
-		MetricsEnabled: true,
-		OnErrorEnabled: true,
-		ValidatorCount: 1,
+		KeyHeader:        "B",
+		TTL:              Duration(2 * time.Hour),
+		KeyMaxLength:     20,
+		StorageType:      "typeB",
+		LockSupported:    true,
+		CacheableEnabled: true,
+		MetricsEnabled:   true,
+		OnErrorEnabled:   true,
+		ValidatorCount:   1,
 	}
 
 	diff := DiffConfig(a, b)
 
 	wantOrder := []string{
 		"KeyHeader", "TTL", "KeyMaxLength", "StorageType",
-		"LockSupported", "MetricsEnabled", "OnErrorEnabled", "ValidatorCount",
+		"LockSupported", "CacheableEnabled", "MetricsEnabled", "OnErrorEnabled", "ValidatorCount",
 	}
 	if len(diff.Diffs) != len(wantOrder) {
 		t.Fatalf("len(Diffs) = %d, want %d", len(diff.Diffs), len(wantOrder))
@@ -205,24 +217,26 @@ func TestDiffConfig_fieldValues(t *testing.T) {
 	t.Parallel()
 
 	a := Config{
-		KeyHeader:      "Idempotency-Key",
-		TTL:            Duration(24 * time.Hour),
-		KeyMaxLength:   0,
-		StorageType:    "*idem.MemoryStorage",
-		LockSupported:  false,
-		MetricsEnabled: false,
-		OnErrorEnabled: false,
-		ValidatorCount: 0,
+		KeyHeader:        "Idempotency-Key",
+		TTL:              Duration(24 * time.Hour),
+		KeyMaxLength:     0,
+		StorageType:      "*idem.MemoryStorage",
+		LockSupported:    false,
+		CacheableEnabled: false,
+		MetricsEnabled:   false,
+		OnErrorEnabled:   false,
+		ValidatorCount:   0,
 	}
 	b := Config{
-		KeyHeader:      "X-Request-Id",
-		TTL:            Duration(1 * time.Hour),
-		KeyMaxLength:   64,
-		StorageType:    "*redis.Storage",
-		LockSupported:  true,
-		MetricsEnabled: true,
-		OnErrorEnabled: true,
-		ValidatorCount: 3,
+		KeyHeader:        "X-Request-Id",
+		TTL:              Duration(1 * time.Hour),
+		KeyMaxLength:     64,
+		StorageType:      "*redis.Storage",
+		LockSupported:    true,
+		CacheableEnabled: true,
+		MetricsEnabled:   true,
+		OnErrorEnabled:   true,
+		ValidatorCount:   3,
 	}
 
 	diff := DiffConfig(a, b)
@@ -237,6 +251,7 @@ func TestDiffConfig_fieldValues(t *testing.T) {
 		{"KeyMaxLength", "0", "64"},
 		{"StorageType", "*idem.MemoryStorage", "*redis.Storage"},
 		{"LockSupported", "false", "true"},
+		{"CacheableEnabled", "false", "true"},
 		{"MetricsEnabled", "false", "true"},
 		{"OnErrorEnabled", "false", "true"},
 		{"ValidatorCount", "0", "3"},
@@ -260,24 +275,26 @@ func TestDiffConfig_coversAllFields(t *testing.T) {
 	t.Parallel()
 
 	a := Config{
-		KeyHeader:      "A",
-		TTL:            Duration(1 * time.Hour),
-		KeyMaxLength:   10,
-		StorageType:    "typeA",
-		LockSupported:  false,
-		MetricsEnabled: false,
-		OnErrorEnabled: false,
-		ValidatorCount: 0,
+		KeyHeader:        "A",
+		TTL:              Duration(1 * time.Hour),
+		KeyMaxLength:     10,
+		StorageType:      "typeA",
+		LockSupported:    false,
+		CacheableEnabled: false,
+		MetricsEnabled:   false,
+		OnErrorEnabled:   false,
+		ValidatorCount:   0,
 	}
 	b := Config{
-		KeyHeader:      "B",
-		TTL:            Duration(2 * time.Hour),
-		KeyMaxLength:   20,
-		StorageType:    "typeB",
-		LockSupported:  true,
-		MetricsEnabled: true,
-		OnErrorEnabled: true,
-		ValidatorCount: 1,
+		KeyHeader:        "B",
+		TTL:              Duration(2 * time.Hour),
+		KeyMaxLength:     20,
+		StorageType:      "typeB",
+		LockSupported:    true,
+		CacheableEnabled: true,
+		MetricsEnabled:   true,
+		OnErrorEnabled:   true,
+		ValidatorCount:   1,
 	}
 
 	diff := DiffConfig(a, b)

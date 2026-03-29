@@ -21,6 +21,7 @@ paths:
 
 ## Key Types
 
+- `CacheableFunc` -- `func(statusCode int) bool` that determines whether a response should be cached. `DefaultCacheable` caches 1xx–4xx and skips 5xx. Configurable via `WithCacheable`.
 - `Duration` -- `time.Duration` wrapper with human-readable JSON serialization (e.g. `"1h0m0s"` instead of nanoseconds). Used in `Config.TTL`.
 - `ConfigDiff` / `FieldDiff` -- `DiffConfig(a, b Config) ConfigDiff` compares two `Config` snapshots and returns structured field-level differences. `HasDiff()` checks for any change; `String()` renders a human-readable summary.
 

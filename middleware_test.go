@@ -854,6 +854,122 @@ func TestMiddleware_Handler(t *testing.T) {
 			t.Errorf("handler call count = %d, want 1", count)
 		}
 	})
+
+	t.Run("does not cache 5xx responses by default", func(t *testing.T) {
+		t.Parallel()
+
+		callCount := 0
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			callCount++
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("error"))
+		})
+
+		mw := newTestMiddleware(t)
+		wrapped := mw.Handler()(handler)
+
+		req1 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req1.Header.Set("Idempotency-Key", "5xx-key")
+		rec1 := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec1, req1)
+
+		if rec1.Code != http.StatusInternalServerError {
+			t.Errorf("first request: status = %d, want %d", rec1.Code, http.StatusInternalServerError)
+		}
+
+		req2 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req2.Header.Set("Idempotency-Key", "5xx-key")
+		rec2 := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec2, req2)
+
+		if callCount != 2 {
+			t.Errorf("handler call count = %d, want 2 (5xx should not be cached)", callCount)
+		}
+	})
+
+	t.Run("caches 4xx responses by default", func(t *testing.T) {
+		t.Parallel()
+
+		callCount := 0
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			callCount++
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte("not found"))
+		})
+
+		mw := newTestMiddleware(t)
+		wrapped := mw.Handler()(handler)
+
+		req1 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req1.Header.Set("Idempotency-Key", "4xx-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req1)
+
+		req2 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req2.Header.Set("Idempotency-Key", "4xx-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req2)
+
+		if callCount != 1 {
+			t.Errorf("handler call count = %d, want 1 (4xx should be cached)", callCount)
+		}
+	})
+
+	t.Run("respects custom cacheable function", func(t *testing.T) {
+		t.Parallel()
+
+		callCount := 0
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			callCount++
+			w.WriteHeader(http.StatusOK)
+		})
+
+		// Only cache 201 Created
+		mw := newTestMiddleware(t, WithCacheable(func(statusCode int) bool {
+			return statusCode == http.StatusCreated
+		}))
+		wrapped := mw.Handler()(handler)
+
+		req1 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req1.Header.Set("Idempotency-Key", "custom-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req1)
+
+		req2 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req2.Header.Set("Idempotency-Key", "custom-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req2)
+
+		if callCount != 2 {
+			t.Errorf("handler call count = %d, want 2 (200 should not be cached with custom func)", callCount)
+		}
+	})
+
+	t.Run("calls OnCacheSkip when response is not cacheable", func(t *testing.T) {
+		t.Parallel()
+
+		var skipKey string
+		var skipCode int
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		})
+
+		mw := newTestMiddleware(t, WithMetrics(Metrics{
+			OnCacheSkip: func(key string, statusCode int) {
+				skipKey = key
+				skipCode = statusCode
+			},
+		}))
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "skip-key")
+		wrapped.ServeHTTP(httptest.NewRecorder(), req)
+
+		if skipKey != "skip-key" {
+			t.Errorf("OnCacheSkip key = %q, want %q", skipKey, "skip-key")
+		}
+
+		if skipCode != http.StatusInternalServerError {
+			t.Errorf("OnCacheSkip statusCode = %d, want %d", skipCode, http.StatusInternalServerError)
+		}
+	})
 }
 
 func TestMiddleware_Config(t *testing.T) {

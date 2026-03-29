@@ -36,4 +36,28 @@ func TestWithMetrics(t *testing.T) {
 			t.Error("metrics = nil, want non-nil even for zero-value Metrics")
 		}
 	})
+
+	t.Run("OnCacheSkip callback is invoked", func(t *testing.T) {
+		t.Parallel()
+
+		var gotKey string
+		var gotCode int
+		cfg := defaultConfig()
+		WithMetrics(Metrics{
+			OnCacheSkip: func(key string, statusCode int) {
+				gotKey = key
+				gotCode = statusCode
+			},
+		})(cfg)
+
+		cfg.metrics.OnCacheSkip("test-key", 500)
+
+		if gotKey != "test-key" {
+			t.Errorf("OnCacheSkip key = %q, want %q", gotKey, "test-key")
+		}
+
+		if gotCode != 500 {
+			t.Errorf("OnCacheSkip statusCode = %d, want %d", gotCode, 500)
+		}
+	})
 }
