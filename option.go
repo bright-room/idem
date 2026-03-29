@@ -163,6 +163,9 @@ func WithOnError(fn func(key string, err error)) Option {
 // status codes 500 and above are not cached.
 func WithCacheable(fn CacheableFunc) Option {
 	return func(c *config) {
+		if fn == nil {
+			fn = DefaultCacheable
+		}
 		c.cacheable = fn
 	}
 }

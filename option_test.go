@@ -98,6 +98,25 @@ func TestWithCacheable(t *testing.T) {
 	}
 }
 
+func TestWithCacheable_nil_falls_back_to_default(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+	WithCacheable(nil)(cfg)
+
+	if cfg.cacheable == nil {
+		t.Fatal("cacheable = nil after WithCacheable(nil), want DefaultCacheable")
+	}
+
+	if !cfg.cacheable(200) {
+		t.Error("cacheable(200) = false, want true (DefaultCacheable)")
+	}
+
+	if cfg.cacheable(500) {
+		t.Error("cacheable(500) = true, want false (DefaultCacheable)")
+	}
+}
+
 func TestWithKeyHeader(t *testing.T) {
 	t.Parallel()
 
