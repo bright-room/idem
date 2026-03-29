@@ -23,20 +23,18 @@ func main() {
 	var orderCount atomic.Int64
 	var paymentCount atomic.Int64
 
-	// Pattern 1: Apply to all routes via global middleware.
+	// Pattern 1: Apply to specific endpoints only.
 	// echo.WrapMiddleware converts func(http.Handler) http.Handler
 	// directly into Echo middleware — no custom helper needed.
-	e.Use(echo.WrapMiddleware(idempotency.Handler()))
-
 	e.POST("/orders", func(c echo.Context) error {
 		n := orderCount.Add(1)
 		return c.JSON(http.StatusCreated, map[string]string{
 			"order_id": fmt.Sprintf("order-%d", n),
 			"message":  "order created",
 		})
-	})
+	}, echo.WrapMiddleware(idempotency.Handler()))
 
-	// Pattern 2: Apply to a route group only.
+	// Pattern 2: Apply to a route group.
 	api := e.Group("/api")
 	api.Use(echo.WrapMiddleware(idempotency.Handler()))
 	api.POST("/payments", func(c echo.Context) error {
