@@ -14,6 +14,10 @@ type Metrics struct {
 	// lock contention is treated as a normal concurrency-control signal, not an error.
 	OnLockContention func(key string, err error)
 
+	// OnCacheSkip is called when a response is not cached because the
+	// CacheableFunc returned false for the response status code.
+	OnCacheSkip func(key string, statusCode int)
+
 	// OnError is called when a storage operation (Get, Set, or Delete) fails.
 	// Lock contention is reported via OnLockContention instead.
 	OnError func(key string, err error)

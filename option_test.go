@@ -38,6 +38,64 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.onError != nil {
 		t.Error("onError is non-nil, want nil")
 	}
+
+	if cfg.cacheable == nil {
+		t.Error("cacheable = nil, want non-nil (DefaultCacheable)")
+	}
+}
+
+func TestDefaultCacheable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		statusCode int
+		want       bool
+	}{
+		{name: "100 is cacheable", statusCode: 100, want: true},
+		{name: "200 is cacheable", statusCode: 200, want: true},
+		{name: "201 is cacheable", statusCode: 201, want: true},
+		{name: "301 is cacheable", statusCode: 301, want: true},
+		{name: "400 is cacheable", statusCode: 400, want: true},
+		{name: "404 is cacheable", statusCode: 404, want: true},
+		{name: "499 is cacheable", statusCode: 499, want: true},
+		{name: "500 is not cacheable", statusCode: 500, want: false},
+		{name: "502 is not cacheable", statusCode: 502, want: false},
+		{name: "503 is not cacheable", statusCode: 503, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := DefaultCacheable(tt.statusCode); got != tt.want {
+				t.Errorf("DefaultCacheable(%d) = %t, want %t", tt.statusCode, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWithCacheable(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultConfig()
+
+	custom := CacheableFunc(func(statusCode int) bool {
+		return statusCode == 200
+	})
+	WithCacheable(custom)(cfg)
+
+	if cfg.cacheable == nil {
+		t.Fatal("cacheable = nil, want non-nil")
+	}
+
+	if !cfg.cacheable(200) {
+		t.Error("cacheable(200) = false, want true")
+	}
+
+	if cfg.cacheable(201) {
+		t.Error("cacheable(201) = true, want false")
+	}
 }
 
 func TestWithKeyHeader(t *testing.T) {
@@ -362,6 +420,20 @@ func TestConfig_snapshot(t *testing.T) {
 		}
 	})
 
+	t.Run("CacheableEnabled reflects cacheable presence", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := defaultConfig()
+		if !cfg.snapshot().CacheableEnabled {
+			t.Error("CacheableEnabled = false with default cacheable, want true")
+		}
+
+		cfg.cacheable = nil
+		if cfg.snapshot().CacheableEnabled {
+			t.Error("CacheableEnabled = true without cacheable, want false")
+		}
+	})
+
 	t.Run("MetricsEnabled reflects metrics presence", func(t *testing.T) {
 		t.Parallel()
 
@@ -416,19 +488,20 @@ func TestConfig_String(t *testing.T) {
 		t.Parallel()
 
 		cfg := Config{
-			KeyHeader:      "Idempotency-Key",
-			TTL:            Duration(24 * time.Hour),
-			StorageType:    "*idem.MemoryStorage",
-			LockSupported:  true,
-			MetricsEnabled: true,
-			OnErrorEnabled: true,
-			ValidatorCount: 3,
+			KeyHeader:        "Idempotency-Key",
+			TTL:              Duration(24 * time.Hour),
+			StorageType:      "*idem.MemoryStorage",
+			LockSupported:    true,
+			CacheableEnabled: true,
+			MetricsEnabled:   true,
+			OnErrorEnabled:   true,
+			ValidatorCount:   3,
 		}
 
 		s := cfg.String()
 		for _, want := range []string{
 			"Idempotency-Key", "24h0m0s", "*idem.MemoryStorage",
-			"LockSupported: true", "MetricsEnabled: true",
+			"LockSupported: true", "CacheableEnabled: true", "MetricsEnabled: true",
 			"OnErrorEnabled: true", "ValidatorCount: 3",
 		} {
 			if !strings.Contains(s, want) {

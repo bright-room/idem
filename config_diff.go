@@ -94,6 +94,14 @@ func DiffConfig(a, b Config) ConfigDiff {
 		})
 	}
 
+	if a.CacheableEnabled != b.CacheableEnabled {
+		diffs = append(diffs, FieldDiff{
+			Field: "CacheableEnabled",
+			Old:   fmt.Sprintf("%t", a.CacheableEnabled),
+			New:   fmt.Sprintf("%t", b.CacheableEnabled),
+		})
+	}
+
 	if a.MetricsEnabled != b.MetricsEnabled {
 		diffs = append(diffs, FieldDiff{
 			Field: "MetricsEnabled",

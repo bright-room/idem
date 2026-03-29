@@ -36,6 +36,9 @@ type Config struct {
 	// LockSupported indicates whether the storage backend implements the Locker interface.
 	LockSupported bool `json:"lock_supported"`
 
+	// CacheableEnabled indicates whether a custom cacheability function is configured.
+	CacheableEnabled bool `json:"cacheable_enabled"`
+
 	// MetricsEnabled indicates whether metrics callbacks are configured.
 	MetricsEnabled bool `json:"metrics_enabled"`
 
@@ -50,6 +53,16 @@ type Config struct {
 // if it does not meet application-specific requirements.
 type Validator interface {
 	Validate(Config) error
+}
+
+// CacheableFunc determines whether a response with the given status code
+// should be cached. It returns true if the response is cacheable.
+type CacheableFunc func(statusCode int) bool
+
+// DefaultCacheable is the default cacheability function.
+// It caches responses with status codes below 500 (i.e., 1xx–4xx).
+func DefaultCacheable(statusCode int) bool {
+	return statusCode < 500
 }
 
 // ValidatorFunc is an adapter to allow the use of ordinary functions as Validators.
@@ -67,6 +80,7 @@ type config struct {
 	ttl          time.Duration
 	keyMaxLength int
 	storage      Storage
+	cacheable    CacheableFunc
 	onError      func(key string, err error)
 	metrics      *Metrics
 	validators   []Validator
@@ -85,6 +99,7 @@ func (c *config) snapshot() Config {
 		_, cfg.LockSupported = c.storage.(Locker)
 	}
 
+	cfg.CacheableEnabled = c.cacheable != nil
 	cfg.MetricsEnabled = c.metrics != nil
 	cfg.OnErrorEnabled = c.onError != nil
 
@@ -94,8 +109,8 @@ func (c *config) snapshot() Config {
 // String returns a human-readable summary of the configuration.
 func (c Config) String() string {
 	return fmt.Sprintf(
-		"idem.Config{KeyHeader: %q, TTL: %v, KeyMaxLength: %d, StorageType: %s, LockSupported: %t, MetricsEnabled: %t, OnErrorEnabled: %t, ValidatorCount: %d}",
-		c.KeyHeader, c.TTL, c.KeyMaxLength, c.StorageType, c.LockSupported, c.MetricsEnabled, c.OnErrorEnabled, c.ValidatorCount,
+		"idem.Config{KeyHeader: %q, TTL: %v, KeyMaxLength: %d, StorageType: %s, LockSupported: %t, CacheableEnabled: %t, MetricsEnabled: %t, OnErrorEnabled: %t, ValidatorCount: %d}",
+		c.KeyHeader, c.TTL, c.KeyMaxLength, c.StorageType, c.LockSupported, c.CacheableEnabled, c.MetricsEnabled, c.OnErrorEnabled, c.ValidatorCount,
 	)
 }
 
@@ -106,6 +121,7 @@ func defaultConfig() *config {
 	return &config{
 		keyHeader: DefaultKeyHeader,
 		ttl:       DefaultTTL,
+		cacheable: DefaultCacheable,
 	}
 }
 
@@ -139,6 +155,15 @@ func WithStorage(s Storage) Option {
 func WithOnError(fn func(key string, err error)) Option {
 	return func(c *config) {
 		c.onError = fn
+	}
+}
+
+// WithCacheable specifies a function that determines whether a response
+// should be cached based on its status code. By default, responses with
+// status codes 500 and above are not cached.
+func WithCacheable(fn CacheableFunc) Option {
+	return func(c *config) {
+		c.cacheable = fn
 	}
 }
 

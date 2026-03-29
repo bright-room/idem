@@ -70,8 +70,9 @@ The first request executes the handler and caches the response. Subsequent reque
 | `WithTTL(d)` | `24h` | Cache duration for stored responses |
 | `WithStorage(s)` | In-memory | Storage backend for cached responses |
 | `WithKeyMaxLength(n)` | `0` (no limit) | Maximum allowed idempotency key length; exceeding keys receive 400 Bad Request |
+| `WithCacheable(fn)` | `DefaultCacheable` (excludes 5xx) | Function that determines whether a response should be cached based on status code |
 | `WithOnError(fn)` | `nil` | Callback invoked when a storage operation fails (receives key and error) |
-| `WithMetrics(m)` | `nil` | Callbacks for observing cache hits, misses, and errors |
+| `WithMetrics(m)` | `nil` | Callbacks for observing cache hits, misses, lock contention, cache skips, and errors |
 | `WithValidation(v...)` | none | Custom validators run during `New()` after built-in checks |
 
 ```go
@@ -90,6 +91,28 @@ if err != nil {
 ```
 
 `New` validates the configuration and returns an error for invalid values such as an empty key header or a non-positive TTL.
+
+### Response Cacheability
+
+By default, the middleware does not cache responses with 5xx status codes. This prevents server errors from being persisted and returned for subsequent requests with the same idempotency key.
+
+Use `WithCacheable` to customize which responses are cached:
+
+```go
+// Cache all responses including 5xx (Stripe-style behavior)
+mw, err := idem.New(
+	idem.WithCacheable(func(statusCode int) bool {
+		return true
+	}),
+)
+
+// Only cache successful responses (2xx)
+mw, err := idem.New(
+	idem.WithCacheable(func(statusCode int) bool {
+		return statusCode >= 200 && statusCode < 300
+	}),
+)
+```
 
 ### Custom Validation
 
@@ -188,6 +211,9 @@ mw, err := idem.New(
 		OnCacheMiss: func(key string) {
 			cacheMisses.WithLabelValues(key).Inc()
 		},
+		OnCacheSkip: func(key string, statusCode int) {
+			cacheSkips.WithLabelValues(key, strconv.Itoa(statusCode)).Inc()
+		},
 		OnLockContention: func(key string, err error) {
 			lockContentions.WithLabelValues(key).Inc()
 		},
@@ -282,7 +308,9 @@ Request
   │
   ▼
 [Middleware (post-response)]
-  ├─ Store response in Storage with TTL
+  ├─ Check CacheableFunc(statusCode)
+  │     ├─ true  → Store response in Storage with TTL
+  │     └─ false → Skip caching (trigger OnCacheSkip if configured)
   └─ Release lock
 ```
 
