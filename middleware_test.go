@@ -706,6 +706,111 @@ func TestMiddleware_Handler(t *testing.T) {
 		}
 	})
 
+	t.Run("releases lock when handler panics", func(t *testing.T) {
+		t.Parallel()
+
+		store := &spyLockerStorage{}
+		mw := newTestMiddleware(t, WithStorage(store))
+
+		handler := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+			panic("test panic")
+		})
+
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "panic-key")
+		rec := httptest.NewRecorder()
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic to propagate")
+			}
+
+			if store.unlockCalls != 1 {
+				t.Errorf("unlockCalls = %d, want 1", store.unlockCalls)
+			}
+		}()
+
+		wrapped.ServeHTTP(rec, req)
+	})
+
+	t.Run("does not cache response when handler panics", func(t *testing.T) {
+		t.Parallel()
+
+		store := &spyStorage{}
+		mw := newTestMiddleware(t, WithStorage(store))
+
+		handler := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+			panic("test panic")
+		})
+
+		wrapped := mw.Handler()(handler)
+
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Idempotency-Key", "panic-key")
+		rec := httptest.NewRecorder()
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic to propagate")
+			}
+
+			if got := store.setCalls.Load(); got != 0 {
+				t.Errorf("setCalls = %d, want 0", got)
+			}
+		}()
+
+		wrapped.ServeHTTP(rec, req)
+	})
+
+	t.Run("caches response with status code only and empty body", func(t *testing.T) {
+		t.Parallel()
+
+		callCount := 0
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			callCount++
+			w.WriteHeader(http.StatusNoContent)
+		})
+
+		mw := newTestMiddleware(t)
+		wrapped := mw.Handler()(handler)
+
+		key := "empty-body-key"
+
+		// First request
+		req1 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req1.Header.Set("Idempotency-Key", key)
+		rec1 := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec1, req1)
+
+		if rec1.Code != http.StatusNoContent {
+			t.Errorf("first response status = %d, want %d", rec1.Code, http.StatusNoContent)
+		}
+
+		if rec1.Body.Len() != 0 {
+			t.Errorf("first response body length = %d, want 0", rec1.Body.Len())
+		}
+
+		// Second request (should come from cache)
+		req2 := httptest.NewRequest(http.MethodPost, "/", nil)
+		req2.Header.Set("Idempotency-Key", key)
+		rec2 := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec2, req2)
+
+		if rec2.Code != http.StatusNoContent {
+			t.Errorf("cached response status = %d, want %d", rec2.Code, http.StatusNoContent)
+		}
+
+		if rec2.Body.Len() != 0 {
+			t.Errorf("cached response body length = %d, want 0", rec2.Body.Len())
+		}
+
+		if callCount != 1 {
+			t.Errorf("handler call count = %d, want 1", callCount)
+		}
+	})
+
 	t.Run("concurrent requests with same key execute handler only once", func(t *testing.T) {
 		t.Parallel()
 
