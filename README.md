@@ -206,19 +206,19 @@ Use `WithMetrics` to observe cache hits, misses, lock contention, and errors —
 mw, err := idem.New(
 	idem.WithMetrics(idem.Metrics{
 		OnCacheHit: func(key string) {
-			cacheHits.WithLabelValues(key).Inc()
+			cacheHits.Inc()
 		},
 		OnCacheMiss: func(key string) {
-			cacheMisses.WithLabelValues(key).Inc()
+			cacheMisses.Inc()
 		},
 		OnCacheSkip: func(key string, statusCode int) {
-			cacheSkips.WithLabelValues(key, strconv.Itoa(statusCode)).Inc()
+			cacheSkips.Inc()
 		},
 		OnLockContention: func(key string, err error) {
-			lockContentions.WithLabelValues(key).Inc()
+			lockContentions.Inc()
 		},
 		OnError: func(key string, err error) {
-			cacheErrors.WithLabelValues(key).Inc()
+			cacheErrors.Inc()
 		},
 	}),
 )
