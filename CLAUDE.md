@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **idem** is a Go HTTP middleware library for idempotency key handling. It intercepts requests with an `Idempotency-Key` header, caches responses, and returns cached results for duplicate requests. Designed to be framework-agnostic (net/http compatible with Gin/Echo/Chi) with pluggable storage backends.
 
-Module: `github.com/bright-room/idem` | Go 1.25.5 | Pre-v1.0
+Module: `github.com/bright-room/idem` | Go 1.26.1 | Pre-v1.0
 
 ## Development Commands
 
