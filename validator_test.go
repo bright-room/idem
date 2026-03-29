@@ -251,6 +251,12 @@ func TestAllowedKeyHeaders(t *testing.T) {
 			keyHeader: "Idempotency-Key",
 			wantErr:   true,
 		},
+		{
+			name:      "empty allowed list rejects any header",
+			allowed:   []string{},
+			keyHeader: "Idempotency-Key",
+			wantErr:   true,
+		},
 	}
 
 	for _, tt := range tests {
