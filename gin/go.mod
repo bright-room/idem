@@ -3,7 +3,7 @@ module github.com/bright-room/idem/gin
 go 1.26.1
 
 require (
-	github.com/bright-room/idem v1.1.1
+	github.com/bright-room/idem v1.1.2
 	github.com/gin-gonic/gin v1.12.0
 )
 
