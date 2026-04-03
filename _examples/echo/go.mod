@@ -3,7 +3,7 @@ module github.com/bright-room/idem/_examples/echo
 go 1.26.1
 
 require (
-	github.com/bright-room/idem v1.1.2
+	github.com/bright-room/idem v1.2.1
 	github.com/labstack/echo/v4 v4.15.1
 )
 
