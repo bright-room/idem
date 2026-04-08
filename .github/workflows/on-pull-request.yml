@@ -55,7 +55,7 @@ jobs:
             -- -race -v -coverprofile=../gin-coverage.out ./...
 
       - name: Test Report
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         if: always()
         with:
           name: Unit Test Report
@@ -171,7 +171,7 @@ jobs:
             -- -race -run Integration -count=1 -coverprofile=coverage-integration.out ./...
 
       - name: Test Report
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         if: always()
         with:
           name: Integration Test Report
