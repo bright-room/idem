@@ -6,7 +6,7 @@ require (
 	github.com/bright-room/idem v1.2.1
 	github.com/bright-room/idem/gin v0.0.0
 	github.com/gin-gonic/gin v1.12.0
-	github.com/redis/go-redis/v9 v9.19.0
+	github.com/redis/go-redis/v9 v9.20.0
 )
 
 require (
