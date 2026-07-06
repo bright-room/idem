@@ -1,20 +1,41 @@
-HELP.md
-
-### go ###
-/coverage.out
-*.exe
-
-### Go Land ###
+# >>> repository-fanout managed >>>
+### JetBrains IDEs ###
+.fleet/
 .idea/
 *.iws
 *.iml
 *.ipr
-out/
 
-### VS Code ###
+### VSCode ###
 .vscode/
 
+### OS ###
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+### env ###
+.env*
+!.env.example
+
 ### AI agents ###
-/.claude/inputs/
-/.claude/outputs/
 .claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+
+### Logfiles ###
+log/*
+!log/.gitkeep
+
+### Tempfiles ###
+.tmp/
+tmp/*
+!tmp/.gitkeep
+
+### Misc ###
+HELP.md
+
+### go ###
+coverage.out
+*.exe
+# <<< repository-fanout managed <<<
