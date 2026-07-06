@@ -39,13 +39,3 @@ HELP.md
 coverage.out
 *.exe
 # <<< repository-fanout managed <<<
-
-/coverage.out
-
-### Go Land ###
-out/
-
-### VS Code ###
-
-/.claude/inputs/
-/.claude/outputs/
